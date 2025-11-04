@@ -171,15 +171,6 @@ function HomeClient() {
   return (
     <PageLayout>
       {/* Hero Neon Logo */}
-                <div className='mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-300'>
-                  发现、收藏、继续观看
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className='px-2 sm:px-10 py-4 sm:py-8 overflow-visible'>
         {/* 顶部 Tab 切换 */}
         <div className='mb-8 flex justify-center'>
           <CapsuleSwitch
