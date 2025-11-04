@@ -22,7 +22,6 @@ import { DoubanItem } from '@/lib/types';
 
 import CapsuleSwitch from '@/components/CapsuleSwitch';
 import ContinueWatching from '@/components/ContinueWatching';
-import PageLayout from '@/components/PageLayout';
 import ScrollableRow from '@/components/ScrollableRow';
 import { useSite } from '@/components/SiteProvider';
 import VideoCard from '@/components/VideoCard';
@@ -168,33 +167,38 @@ function HomeClient() {
   };
 
   return (
-    <div className="min-h-screen">
-      {/* 直接在首页中添加固定导航栏 */}
-      <nav className="fixed top-0 left-0 right-0 z-50 h-16 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 h-full">
-          <div className="flex items-center justify-between h-full">
-            <div className="flex items-center">
-              <span className="text-xl font-bold text-gray-800 dark:text-white">
-                DecoTV
-              </span>
-            </div>
-            <div className="flex items-center space-x-6">
-              <Link href="/" className="text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400">
-                首页
-              </Link>
-              <Link href="/search" className="text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400">
-                搜索
-              </Link>
-              <Link href="/douban" className="text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400">
-                豆瓣
-              </Link>
-            </div>
+    <div className="relative min-h-screen">
+      {/* 使用内联样式确保绝对固定 */}
+      <nav 
+        className="fixed top-0 left-0 right-0 z-[9999] h-16 bg-gray-900/95 backdrop-blur-md border-b border-gray-700"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9999
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
+          <div className="flex items-center">
+            <span className="text-xl font-bold text-white">DecoTV</span>
+          </div>
+          <div className="flex items-center space-x-6">
+            <Link href="/" className="text-white hover:text-purple-300 transition-colors">
+              首页
+            </Link>
+            <Link href="/search" className="text-white hover:text-purple-300 transition-colors">
+              搜索
+            </Link>
+            <Link href="/douban" className="text-white hover:text-purple-300 transition-colors">
+              豆瓣
+            </Link>
           </div>
         </div>
       </nav>
 
-      {/* 主要内容区域 */}
-      <div className="pt-16"> {/* 精确匹配导航栏高度 */}
+      {/* 主要内容 - 使用明确的 margin-top */}
+      <div style={{ marginTop: '64px' }}>
         <div className='px-2 sm:px-10 py-4 sm:py-8 overflow-visible'>
           {/* 顶部 Tab 切换 */}
           <div className='mb-8 flex justify-center'>
@@ -482,7 +486,7 @@ function HomeClient() {
 
       {/* 公告弹窗 */}
       {announcement && showAnnouncement && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm dark:bg-black/70 p-4`}>
+        <div className={`fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm dark:bg-black/70 p-4`}>
           <div className='w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-gray-900'>
             <div className='flex justify-between items-start mb-4'>
               <h3 className='text-2xl font-bold text-gray-800 dark:text-white'>
