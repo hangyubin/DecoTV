@@ -26,7 +26,7 @@ import DecoTVFooterCard from '@/components/DecoTVFooterCard';
 import PageLayout from '@/components/PageLayout';
 import ScrollableRow from '@/components/ScrollableRow';
 import { useSite } from '@/components/SiteProvider';
-import VideoCard from '@/components/VideoCard';
+//import VideoCard from '@/components/VideoCard';
 
 function HomeClient() {
   const [activeTab, setActiveTab] = useState<'home' | 'favorites'>('home');
@@ -171,6 +171,7 @@ function HomeClient() {
   return (
     <PageLayout>
       {/* Hero Neon Logo */}
+      <div className='px-2 sm:px-10 py-4 sm:py-8 overflow-visible'>
         {/* 顶部 Tab 切换 */}
         <div className='mb-8 flex justify-center'>
           <CapsuleSwitch
@@ -453,7 +454,7 @@ function HomeClient() {
           )}
 
           {/* DecoTV 底部炫酷卡片 */}
-          {/* <DecoTVFooterCard /> */}
+          <DecoTVFooterCard />
         </div>
       </div>
       {announcement && showAnnouncement && (
