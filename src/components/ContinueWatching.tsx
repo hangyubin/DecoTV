@@ -223,7 +223,7 @@ export default function ContinueWatching({ className, compact }: ContinueWatchin
                   )
                 }
                 type={record.total_episodes > 1 ? 'tv' : ''}
-                compact={compact}
+                // 移除了 compact 属性，因为 VideoCard 不支持
               />
             </div>
           );
