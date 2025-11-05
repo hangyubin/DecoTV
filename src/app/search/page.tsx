@@ -100,13 +100,13 @@ function useScrollToTop(threshold = SEARCH_CONFIG.BACK_TO_TOP_THRESHOLD) {
 }
 
 // 子组件：聚合开关
-function AggregateToggle({ 
+const AggregateToggle = ({ 
   viewMode, 
   setViewMode 
 }: { 
   viewMode: 'agg' | 'all'; 
   setViewMode: (mode: 'agg' | 'all') => void;
-}) {
+}) => {
   return (
     <label className='flex items-center gap-2 cursor-pointer select-none shrink-0'>
       <span className='text-xs sm:text-sm text-gray-700 dark:text-gray-300'>聚合</span>
@@ -122,10 +122,10 @@ function AggregateToggle({
       </div>
     </label>
   );
-}
+};
 
 // 子组件：搜索结果网格
-function ResultsGrid({ 
+const ResultsGrid = ({ 
   viewMode, 
   filteredAllResults, 
   filteredAggResults, 
@@ -139,7 +139,7 @@ function ResultsGrid({
   searchQuery: string;
   getGroupRef: (key: string) => React.RefObject<VideoCardHandle>;
   computeGroupStats: (group: SearchResult[]) => GroupStats;
-}) {
+}) => {
   return (
     <div
       key={`search-results-${viewMode}`}
@@ -190,10 +190,10 @@ function ResultsGrid({
           ))}
     </div>
   );
-}
+};
 
 // 子组件：搜索历史区域
-function SearchHistorySection({ 
+const SearchHistorySection = ({ 
   searchHistory, 
   onSearch, 
   onDelete, 
@@ -203,7 +203,7 @@ function SearchHistorySection({
   onSearch: (query: string) => void;
   onDelete: (query: string) => void;
   onClear: () => void;
-}) {
+}) => {
   return (
     <section className='mb-12'>
       <h2 className='mb-4 text-xl font-bold text-gray-800 text-left dark:text-gray-200'>
@@ -241,16 +241,16 @@ function SearchHistorySection({
       </div>
     </section>
   );
-}
+};
 
 // 子组件：返回顶部按钮
-function BackToTopButton({ 
+const BackToTopButton = ({ 
   show, 
   onClick 
 }: { 
   show: boolean; 
   onClick: () => void;
-}) {
+}) => {
   return (
     <button
       onClick={onClick}
@@ -264,7 +264,7 @@ function BackToTopButton({
       <ChevronUp className='w-6 h-6 transition-transform group-hover:scale-110' />
     </button>
   );
-}
+};
 
 function SearchPageClient() {
   const router = useRouter();
