@@ -759,6 +759,19 @@ function SearchPageClient() {
     router.push(`/search?q=${encodeURIComponent(trimmed)}`);
   };
 
+  // 修复：为 onEnterKey 创建一个没有参数的函数
+  const handleEnterKey = () => {
+    const trimmed = searchQuery.trim().replace(/\s+/g, ' ');
+    if (!trimmed) return;
+
+    setSearchQuery(trimmed);
+    setIsLoading(true);
+    setShowResults(true);
+    setShowSuggestions(false);
+
+    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  };
+
   const handleSuggestionSelect = (suggestion: string) => {
     setSearchQuery(suggestion);
     setShowSuggestions(false);
@@ -806,7 +819,7 @@ function SearchPageClient() {
                 isVisible={showSuggestions}
                 onSelect={handleSuggestionSelect}
                 onClose={() => setShowSuggestions(false)}
-                onEnterKey={handleSearch}
+                onEnterKey={handleEnterKey}  {/* 修复：使用无参数的函数 */}
               />
             </div>
           </form>
