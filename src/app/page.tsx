@@ -10,7 +10,6 @@ import {
   BangumiCalendarData,
   GetBangumiCalendarData,
 } from '@/lib/bangumi.client';
-// 客户端收藏 API
 import {
   clearAllFavorites,
   getAllFavorites,
@@ -72,7 +71,6 @@ function HomeClient() {
       try {
         setLoading(true);
 
-        // 并行获取热门电影、热门剧集和热门综艺
         const [moviesData, tvShowsData, varietyShowsData, bangumiCalendarData] =
           await Promise.all([
             getDoubanCategories({
@@ -112,7 +110,6 @@ function HomeClient() {
   const updateFavoriteItems = async (allFavorites: Record<string, any>) => {
     const allPlayRecords = await getAllPlayRecords();
 
-    // 根据保存时间排序（从近到远）
     const sorted = Object.entries(allFavorites)
       .sort(([, a], [, b]) => b.save_time - a.save_time)
       .map(([key, fav]) => {
@@ -120,7 +117,6 @@ function HomeClient() {
         const source = key.slice(0, plusIndex);
         const id = key.slice(plusIndex + 1);
 
-        // 查找对应的播放记录，获取当前集数
         const playRecord = allPlayRecords[key];
         const currentEpisode = playRecord?.index;
 
@@ -151,7 +147,6 @@ function HomeClient() {
 
     loadFavorites();
 
-    // 监听收藏更新事件
     const unsubscribe = subscribeToDataUpdates(
       'favoritesUpdated',
       (newFavorites: Record<string, any>) => {
@@ -164,7 +159,7 @@ function HomeClient() {
 
   const handleCloseAnnouncement = (announcement: string) => {
     setShowAnnouncement(false);
-    localStorage.setItem('hasSeenAnnouncement', announcement); // 记录已查看弹窗
+    localStorage.setItem('hasSeenAnnouncement', announcement);
   };
 
   return (
@@ -242,8 +237,7 @@ function HomeClient() {
                 </div>
                 <ScrollableRow>
                   {loading
-                    ? // 加载状态显示灰色占位数据
-                      Array.from({ length: 8 }).map((_, index) => (
+                    ? Array.from({ length: 8 }).map((_, index) => (
                         <div
                           key={index}
                           className="min-w-[96px] w-24 sm:min-w-[180px] sm:w-44"
@@ -254,8 +248,7 @@ function HomeClient() {
                           <div className="mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800"></div>
                         </div>
                       ))
-                    : // 显示真实数据
-                      hotMovies.map((movie, index) => (
+                    : hotMovies.map((movie, index) => (
                         <div
                           key={index}
                           className="min-w-[96px] w-24 sm:min-w-[180px] sm:w-44"
@@ -290,8 +283,7 @@ function HomeClient() {
                 </div>
                 <ScrollableRow>
                   {loading
-                    ? // 加载状态显示灰色占位数据
-                      Array.from({ length: 8 }).map((_, index) => (
+                    ? Array.from({ length: 8 }).map((_, index) => (
                         <div
                           key={index}
                           className="min-w-[96px] w-24 sm:min-w-[180px] sm:w-44"
@@ -302,8 +294,7 @@ function HomeClient() {
                           <div className="mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800"></div>
                         </div>
                       ))
-                    : // 显示真实数据
-                      hotTvShows.map((show, index) => (
+                    : hotTvShows.map((show, index) => (
                         <div
                           key={index}
                           className="min-w-[96px] w-24 sm:min-w-[180px] sm:w-44"
@@ -337,8 +328,7 @@ function HomeClient() {
                 </div>
                 <ScrollableRow>
                   {loading
-                    ? // 加载状态显示灰色占位数据
-                      Array.from({ length: 8 }).map((_, index) => (
+                    ? Array.from({ length: 8 }).map((_, index) => (
                         <div
                           key={index}
                           className="min-w-[96px] w-24 sm:min-w-[180px] sm:w-44"
@@ -349,9 +339,7 @@ function HomeClient() {
                           <div className="mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800"></div>
                         </div>
                       ))
-                    : // 展示当前日期的番剧
-                      (() => {
-                        // 获取当前日期对应的星期
+                    : (() => {
                         const today = new Date();
                         const weekdays = [
                           'Sun',
@@ -364,13 +352,11 @@ function HomeClient() {
                         ];
                         const currentWeekday = weekdays[today.getDay()];
 
-                        // 找到当前星期对应的番剧数据
                         const todayAnimes =
                           bangumiCalendarData.find(
                             (item) => item.weekday.en === currentWeekday
                           )?.items || [];
 
-                        // 过滤掉无效数据
                         const validAnimes = todayAnimes.filter(
                           (anime) => anime && anime.id
                         );
@@ -418,8 +404,7 @@ function HomeClient() {
                 </div>
                 <ScrollableRow>
                   {loading
-                    ? // 加载状态显示灰色占位数据
-                      Array.from({ length: 8 }).map((_, index) => (
+                    ? Array.from({ length: 8 }).map((_, index) => (
                         <div
                           key={index}
                           className="min-w-[96px] w-24 sm:min-w-[180px] sm:w-44"
@@ -430,8 +415,7 @@ function HomeClient() {
                           <div className="mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800"></div>
                         </div>
                       ))
-                    : // 显示真实数据
-                      hotVarietyShows.map((show, index) => (
+                    : hotVarietyShows.map((show, index) => (
                         <div
                           key={index}
                           className="min-w-[96px] w-24 sm:min-w-[180px] sm:w-44"
@@ -454,40 +438,61 @@ function HomeClient() {
       </div>
       {announcement && showAnnouncement && (
         <div
-          className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm dark:bg-black/70 p-4 transition-opacity duration-300 ${
-            showAnnouncement ? '' : 'opacity-0 pointer-events-none'
-          }`}
-          onTouchStart={(e) => {
-            // 如果点击的是背景区域，阻止触摸事件冒泡，防止背景滚动
-            if (e.target === e.currentTarget) {
-              e.preventDefault();
-            }
-          }}
-          onTouchMove={(e) => {
-            // 如果触摸的是背景区域，阻止触摸移动，防止背景滚动
-            if (e.target === e.currentTarget) {
-              e.preventDefault();
-              e.stopPropagation();
-            }
-          }}
-          onTouchEnd={(e) => {
-            // 如果触摸的是背景区域，阻止触摸结束事件，防止背景滚动
-            if (e.target === e.currentTarget) {
-              e.preventDefault();
-            }
-          }}
-          style={{
-            touchAction: 'none', // 禁用所有触摸操作
-          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm dark:bg-black/70 p-4"
+          style={{ touchAction: 'none' }}
         >
           <div
-            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-gray-900 transform transition-all duration-300 hover:shadow-2xl"
-            onTouchMove={(e) => {
-              // 允许公告内容区域正常滚动，阻止事件冒泡到外层
-              e.stopPropagation();
-            }}
-            style={{
-              touchAction: 'auto', // 允许内容区域的正常触摸操作
-            }}
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-gray-900"
+            style={{ touchAction: 'auto' }}
           >
             <div className="flex justify-between items-start mb-4">
+              <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-200">
+                公告
+              </h3>
+              <button
+                onClick={() => handleCloseAnnouncement(announcement)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="关闭"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="mb-6">
+              <div className="relative overflow-hidden rounded-lg mb-4 p-4 bg-gray-100 dark:bg-gray-800"
+              >
+                <p className="text-gray-700 dark:text-gray-200 leading-relaxed">
+                  {announcement}
+                </p>
+              </div>
+            <button
+              onClick={() => handleCloseAnnouncement(announcement)}
+              className="w-full rounded-lg bg-gray-600 px-4 py-3 text-white font-medium hover:bg-gray-700 transition-colors"
+            >
+              我知道了
+            </button>
+          </div>
+        </div>
+      )}
+    </PageLayout>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <HomeClient />
+    </Suspense>
+  );
+}
