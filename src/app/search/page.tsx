@@ -206,13 +206,11 @@ function SearchPageClient() {
     // 改进的匹配逻辑：使用多种匹配策略
     const relevantResults = searchResults.filter((item) => {
       const title = item.title.toLowerCase();
-      const originalTitle = item.original_title?.toLowerCase() || '';
       
       // 如果查询很短，使用更宽松的匹配
       if (query.length <= 2) {
         return (
           title.includes(query) ||
-          originalTitle.includes(query) ||
           title.replace(/\s+/g, '').includes(query.replace(/\s+/g, ''))
         );
       }
@@ -221,35 +219,28 @@ function SearchPageClient() {
       const matchStrategies = [
         // 1. 完全匹配
         title === query,
-        originalTitle === query,
         
         // 2. 包含匹配
         title.includes(query),
-        originalTitle.includes(query),
         
         // 3. 移除标点符号和空格后匹配
         title.replace(/[^\w\u4e00-\u9fa5]/g, '').includes(query.replace(/[^\w\u4e00-\u9fa5]/g, '')),
-        originalTitle.replace(/[^\w\u4e00-\u9fa5]/g, '').includes(query.replace(/[^\w\u4e00-\u9fa5]/g, '')),
         
         // 4. 开头匹配
         title.startsWith(query),
-        originalTitle.startsWith(query),
         
         // 5. 结尾匹配
         title.endsWith(query),
-        originalTitle.endsWith(query),
         
         // 6. 分词匹配（针对中文）
         ...(query.length > 1 ? [
           // 将查询词拆分为单个字符，检查是否都出现在标题中
           query.split('').every(char => title.includes(char)),
-          query.split('').every(char => originalTitle.includes(char)),
         ] : []),
         
         // 7. 编辑距离匹配（简单的相似度计算）
         ...(query.length > 2 ? [
           calculateSimilarity(title, query) > 0.7,
-          calculateSimilarity(originalTitle, query) > 0.7,
         ] : []),
       ];
 
