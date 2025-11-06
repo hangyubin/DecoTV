@@ -173,28 +173,40 @@ function SearchPageClient() {
     return order === 'asc' ? aNum - bNum : bNum - aNum;
   };
 
-  // 聚合后的结果（按标题和年份分组）
+  // 改进的聚合结果计算 - 修复匹配不全问题
   const aggregatedResults = useMemo(() => {
     const query = currentQueryRef.current.trim().toLowerCase();
-    const queryNoSpace = query.replace(/\s+/g, '');
+    
+    // 如果查询为空，返回空数组
+    if (!query) return [];
 
-    // 过滤：只保留标题相关的结果
+    // 改进的匹配逻辑：使用更宽松的匹配条件
     const relevantResults = searchResults.filter((item) => {
       const title = item.title.toLowerCase();
+      
+      // 1. 完全匹配
+      if (title === query) return true;
+      
+      // 2. 包含完整查询
+      if (title.includes(query)) return true;
+      
+      // 3. 移除空格后匹配
       const titleNoSpace = title.replace(/\s+/g, '');
-
-      // 包含完整关键词
-      if (title.includes(query) || titleNoSpace.includes(queryNoSpace)) {
-        return true;
-      }
-
-      // 顺序包含关键词的所有字符
+      const queryNoSpace = query.replace(/\s+/g, '');
+      if (titleNoSpace.includes(queryNoSpace)) return true;
+      
+      // 4. 模糊匹配：查询词是标题的子序列
       let queryIndex = 0;
-      for (
-        let i = 0;
-        i < titleNoSpace.length && queryIndex < queryNoSpace.length;
-        i++
-      ) {
+      for (let i = 0; i < title.length && queryIndex < query.length; i++) {
+        if (title[i] === query[queryIndex]) {
+          queryIndex++;
+        }
+      }
+      if (queryIndex === query.length) return true;
+      
+      // 5. 移除空格后的模糊匹配
+      queryIndex = 0;
+      for (let i = 0; i < titleNoSpace.length && queryIndex < queryNoSpace.length; i++) {
         if (titleNoSpace[i] === queryNoSpace[queryIndex]) {
           queryIndex++;
         }
@@ -202,14 +214,17 @@ function SearchPageClient() {
       return queryIndex === queryNoSpace.length;
     });
 
+    // 改进的聚合逻辑：使用更精确的分组键
     const map = new Map<string, SearchResult[]>();
     const keyOrder: string[] = []; // 记录键出现的顺序
 
     relevantResults.forEach((item) => {
-      // 使用 title + year + type 作为键，year 必然存在，但依然兜底 'unknown'
-      const key = `${item.title.replaceAll(' ', '')}-${
-        item.year || 'unknown'
-      }-${item.episodes.length === 1 ? 'movie' : 'tv'}`;
+      // 使用标准化的标题、年份和类型作为键
+      const normalizedTitle = item.title.trim().toLowerCase().replace(/\s+/g, '');
+      const year = item.year || 'unknown';
+      const type = item.episodes.length === 1 ? 'movie' : 'tv';
+      const key = `${normalizedTitle}-${year}-${type}`;
+      
       const arr = map.get(key) || [];
 
       // 如果是新的键，记录其顺序
