@@ -28,6 +28,29 @@ import SearchResultFilter, {
 import SearchSuggestions from '@/components/SearchSuggestions';
 import VideoCard, { VideoCardHandle } from '@/components/VideoCard';
 
+// 相似度计算函数
+const calculateSimilarity = (str1: string, str2: string): number => {
+  if (!str1 || !str2) return 0;
+  
+  const longer = str1.length > str2.length ? str1 : str2;
+  const shorter = str1.length > str2.length ? str2 : str1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  // 简单的相似度计算：检查较短字符串在较长字符串中的匹配程度
+  let matches = 0;
+  let shorterIndex = 0;
+  
+  for (let i = 0; i < longer.length && shorterIndex < shorter.length; i++) {
+    if (longer[i] === shorter[shorterIndex]) {
+      matches++;
+      shorterIndex++;
+    }
+  }
+  
+  return matches / shorter.length;
+};
+
 function SearchPageClient() {
   // 搜索历史
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
@@ -173,50 +196,69 @@ function SearchPageClient() {
     return order === 'asc' ? aNum - bNum : bNum - aNum;
   };
 
-  // 改进的聚合结果计算 - 修复匹配不全问题
+  // 改进的聚合结果计算 - 更全面的模糊匹配
   const aggregatedResults = useMemo(() => {
     const query = currentQueryRef.current.trim().toLowerCase();
     
     // 如果查询为空，返回空数组
     if (!query) return [];
 
-    // 改进的匹配逻辑：使用更宽松的匹配条件
+    // 改进的匹配逻辑：使用多种匹配策略
     const relevantResults = searchResults.filter((item) => {
       const title = item.title.toLowerCase();
+      const originalTitle = item.original_title?.toLowerCase() || '';
       
-      // 1. 完全匹配
-      if (title === query) return true;
-      
-      // 2. 包含完整查询
-      if (title.includes(query)) return true;
-      
-      // 3. 移除空格后匹配
-      const titleNoSpace = title.replace(/\s+/g, '');
-      const queryNoSpace = query.replace(/\s+/g, '');
-      if (titleNoSpace.includes(queryNoSpace)) return true;
-      
-      // 4. 模糊匹配：查询词是标题的子序列
-      let queryIndex = 0;
-      for (let i = 0; i < title.length && queryIndex < query.length; i++) {
-        if (title[i] === query[queryIndex]) {
-          queryIndex++;
-        }
+      // 如果查询很短，使用更宽松的匹配
+      if (query.length <= 2) {
+        return (
+          title.includes(query) ||
+          originalTitle.includes(query) ||
+          title.replace(/\s+/g, '').includes(query.replace(/\s+/g, ''))
+        );
       }
-      if (queryIndex === query.length) return true;
-      
-      // 5. 移除空格后的模糊匹配
-      queryIndex = 0;
-      for (let i = 0; i < titleNoSpace.length && queryIndex < queryNoSpace.length; i++) {
-        if (titleNoSpace[i] === queryNoSpace[queryIndex]) {
-          queryIndex++;
-        }
-      }
-      return queryIndex === queryNoSpace.length;
+
+      // 多种匹配策略
+      const matchStrategies = [
+        // 1. 完全匹配
+        title === query,
+        originalTitle === query,
+        
+        // 2. 包含匹配
+        title.includes(query),
+        originalTitle.includes(query),
+        
+        // 3. 移除标点符号和空格后匹配
+        title.replace(/[^\w\u4e00-\u9fa5]/g, '').includes(query.replace(/[^\w\u4e00-\u9fa5]/g, '')),
+        originalTitle.replace(/[^\w\u4e00-\u9fa5]/g, '').includes(query.replace(/[^\w\u4e00-\u9fa5]/g, '')),
+        
+        // 4. 开头匹配
+        title.startsWith(query),
+        originalTitle.startsWith(query),
+        
+        // 5. 结尾匹配
+        title.endsWith(query),
+        originalTitle.endsWith(query),
+        
+        // 6. 分词匹配（针对中文）
+        ...(query.length > 1 ? [
+          // 将查询词拆分为单个字符，检查是否都出现在标题中
+          query.split('').every(char => title.includes(char)),
+          query.split('').every(char => originalTitle.includes(char)),
+        ] : []),
+        
+        // 7. 编辑距离匹配（简单的相似度计算）
+        ...(query.length > 2 ? [
+          calculateSimilarity(title, query) > 0.7,
+          calculateSimilarity(originalTitle, query) > 0.7,
+        ] : []),
+      ];
+
+      return matchStrategies.some(match => match);
     });
 
     // 改进的聚合逻辑：使用更精确的分组键
     const map = new Map<string, SearchResult[]>();
-    const keyOrder: string[] = []; // 记录键出现的顺序
+    const keyOrder: string[] = [];
 
     relevantResults.forEach((item) => {
       // 使用标准化的标题、年份和类型作为键
@@ -227,7 +269,6 @@ function SearchPageClient() {
       
       const arr = map.get(key) || [];
 
-      // 如果是新的键，记录其顺序
       if (arr.length === 0) {
         keyOrder.push(key);
       }
@@ -236,7 +277,6 @@ function SearchPageClient() {
       map.set(key, arr);
     });
 
-    // 按出现顺序返回聚合结果
     return keyOrder.map(
       (key) => [key, map.get(key)!] as [string, SearchResult[]]
     );
