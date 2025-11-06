@@ -60,7 +60,7 @@ export default function TopNavbar() {
                 <span className={`text-lg font-extrabold tracking-tight neon-text transition-colors ${
                   clickedItem === '/' ? 'text-red-500' : ''
                 }`}>
-                  {siteName || 'DecoTV'}
+                  {siteName || 'cocoTV'}
                 </span>
                 <div className='absolute -bottom-1 left-0 right-0 h-0.5 bg-blue-400 scale-x-0 group-hover:scale-x-100 transition-transform duration-300' />
               </Link>
