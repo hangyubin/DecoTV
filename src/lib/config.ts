@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, no-console, @typescript-eslint/no-non-null-assertion */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { db } from '@/lib/db';
 
 import { AdminConfig } from './admin.types';
@@ -31,6 +34,11 @@ interface ConfigFileStruct {
   }[];
   lives?: {
     [key: string]: LiveCfg;
+  };
+  subscription?: {
+    URL?: string;
+    AutoUpdate?: boolean;
+    LastCheck?: string;
   };
 }
 
@@ -184,6 +192,26 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   return adminConfig;
 }
 
+// 读取根目录的config.json文件
+function readRootConfigFile(): ConfigFileStruct {
+  try {
+    // 构建绝对路径指向项目根目录的config.json
+    const configFilePath = path.join(process.cwd(), 'config.json');
+    
+    // 检查文件是否存在
+    if (fs.existsSync(configFilePath)) {
+      // 读取并解析文件内容
+      const fileContent = fs.readFileSync(configFilePath, 'utf8');
+      return JSON.parse(fileContent) as ConfigFileStruct;
+    }
+  } catch (error) {
+    console.error('读取根目录config.json文件失败:', error);
+  }
+  
+  // 如果读取失败，返回空对象
+  return {} as ConfigFileStruct;
+}
+
 async function getInitConfig(
   configFile: string,
   subConfig: {
@@ -196,11 +224,45 @@ async function getInitConfig(
     LastCheck: '',
   }
 ): Promise<AdminConfig> {
+  // 首先尝试解析数据库中的配置文件
   let cfgFile: ConfigFileStruct;
   try {
     cfgFile = JSON.parse(configFile) as ConfigFileStruct;
   } catch (e) {
     cfgFile = {} as ConfigFileStruct;
+  }
+  
+  // 然后读取根目录的config.json文件
+  const rootConfig = readRootConfigFile();
+  
+  // 合并两个配置，根目录配置优先级更高
+  cfgFile = {
+    ...cfgFile,
+    ...rootConfig,
+    // 确保api_site字段合并而不是覆盖
+    api_site: {
+      ...cfgFile.api_site,
+      ...rootConfig.api_site
+    },
+    // 确保custom_category字段合并
+    custom_category: [
+      ...(cfgFile.custom_category || []),
+      ...(rootConfig.custom_category || [])
+    ],
+    // 确保lives字段合并
+    lives: {
+      ...cfgFile.lives,
+      ...rootConfig.lives
+    }
+  };
+  
+  // 合并订阅配置，根目录配置优先级更高
+  if (rootConfig.subscription) {
+    subConfig = {
+      URL: rootConfig.subscription.URL || subConfig.URL,
+      AutoUpdate: rootConfig.subscription.AutoUpdate !== undefined ? rootConfig.subscription.AutoUpdate : subConfig.AutoUpdate,
+      LastCheck: rootConfig.subscription.LastCheck || subConfig.LastCheck
+    };
   }
   const adminConfig: AdminConfig = {
     ConfigFile: configFile,
@@ -298,10 +360,8 @@ async function getInitConfig(
 }
 
 export async function getConfig(): Promise<AdminConfig> {
-  // 直接使用内存缓存
-  if (cachedConfig) {
-    return cachedConfig;
-  }
+  // 清除缓存，确保每次都重新读取配置文件
+  cachedConfig = undefined;
 
   // 读 db
   let adminConfig: AdminConfig | null = null;
@@ -311,13 +371,22 @@ export async function getConfig(): Promise<AdminConfig> {
     console.error('获取管理员配置失败:', e);
   }
 
-  // db 中无配置，执行一次初始化
-  if (!adminConfig) {
+  // 每次都重新初始化配置，确保包含最新的根目录config.json内容
+  if (adminConfig) {
+    adminConfig = await getInitConfig(adminConfig.ConfigFile, adminConfig.ConfigSubscribtion);
+  } else {
     adminConfig = await getInitConfig('');
   }
   adminConfig = configSelfCheck(adminConfig);
   cachedConfig = adminConfig;
-  db.saveAdminConfig(cachedConfig);
+  
+  // 保存更新后的配置到数据库
+  try {
+    await db.saveAdminConfig(cachedConfig);
+  } catch (e) {
+    console.error('保存管理员配置失败:', e);
+  }
+  
   return cachedConfig;
 }
 

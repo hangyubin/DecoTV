@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 覆盖站长密码
-    exportData.data.userData[process.env.USERNAME].password = process.env.PASSWORD;
+    exportData.data.userData[process.env.USERNAME].password = process.env.ADMIN_PASSWORD;
 
     // 将数据转换为JSON字符串
     const jsonData = JSON.stringify(exportData);

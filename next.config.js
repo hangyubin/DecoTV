@@ -4,17 +4,12 @@
 const nextConfig = {
   // 根据环境自动选择输出模式：Vercel自动处理，Docker使用standalone
   ...(process.env.VERCEL ? {} : { output: 'standalone' }),
-  eslint: {
-    dirs: ['src'],
-  },
-
+  
   reactStrictMode: false,
-  swcMinify: false,
-
-  experimental: {
-    instrumentationHook: process.env.NODE_ENV === 'production',
-  },
-
+  
+  // Turbopack配置（Next.js 16默认使用）
+  turbopack: {},
+  
   // Uncoment to add domain whitelist
   images: {
     unoptimized: true,
@@ -29,8 +24,12 @@ const nextConfig = {
       },
     ],
   },
-
+  
+  // 为了兼容性保留webpack配置
   webpack(config) {
+    // 标记这是webpack配置，避免Next.js 16的警告
+    config.experiments = config.experiments || {};
+    
     // Grab the existing rule that handles SVG imports
     const fileLoaderRule = config.module.rules.find((rule) =>
       rule.test?.test?.('.svg')
@@ -77,4 +76,5 @@ const withPWA = require('next-pwa')({
   skipWaiting: true,
 });
 
+// 导出配置
 module.exports = withPWA(nextConfig);

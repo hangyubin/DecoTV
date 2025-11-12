@@ -4491,10 +4491,10 @@ const ConfigFileComponent = ({
     if (config?.ConfigFile) {
       setConfigContent(config.ConfigFile);
     }
-    if (config?.ConfigSubscribtion) {
-      setSubscriptionUrl(config.ConfigSubscribtion.URL);
-      setAutoUpdate(config.ConfigSubscribtion.AutoUpdate);
-      setLastCheckTime(config.ConfigSubscribtion.LastCheck || '');
+    if (config?.subscription) {
+      setSubscriptionUrl(config.subscription.URL);
+      setAutoUpdate(config.subscription.AutoUpdate);
+        setLastCheckTime(config.subscription.LastCheck || '');
     }
   }, [config]);
 
@@ -5944,20 +5944,13 @@ function AdminPageClient() {
     userConfig: false,
     videoSource: false,
     liveSource: false,
-    tvboxConfig: false,
     siteConfig: false,
     categoryConfig: false,
     configFile: false,
     dataMigration: false,
   });
 
-  // TVBox 配置相关状态
-  const [tvboxFormat, setTvboxFormat] = useState<'json' | 'base64'>('json');
-  const [tvboxMode, setTvboxMode] = useState<
-    'standard' | 'safe' | 'yingshicang' | 'fast'
-  >('fast');
-  const [diagnosisResult, setDiagnosisResult] = useState<any>(null);
-  const [isDiagnosing, setIsDiagnosing] = useState(false);
+  // TVBox configuration removed
 
   // JAR 状态监控相关状态
   const [jarStatus, setJarStatus] = useState<any>(null);
@@ -6006,160 +5999,11 @@ function AdminPageClient() {
     }));
   };
 
-  // TVBox 配置相关函数
-  const getTvboxConfigUrl = () => {
-    // 优先使用显式配置的公网基址，避免出现 0.0.0.0、localhost 等不可用地址
-    const envBase = (process.env.NEXT_PUBLIC_SITE_BASE || '')
-      .trim()
-      .replace(/\/$/, '');
-    let baseUrl = envBase;
-    if (!baseUrl) {
-      if (typeof window !== 'undefined') {
-        baseUrl = window.location.origin;
-      } else {
-        baseUrl = '';
-      }
-    }
-    // 始终附带 format 参数，确保 JSON 时为 ?format=json
-    const modeParam = tvboxMode !== 'standard' ? `&mode=${tvboxMode}` : '';
-    return `${baseUrl}/api/tvbox/config?format=${tvboxFormat}${modeParam}`;
-  };
+  // TVBox configuration functions removed
 
-  const handleTvboxCopy = async () => {
-    try {
-      const url = getTvboxConfigUrl();
-      await navigator.clipboard.writeText(url);
-      showSuccess('复制成功！订阅地址已复制到剪贴板', showAlert);
-    } catch (err) {
-      showError('复制失败，请手动复制地址', showAlert);
-    }
-  };
+  // JAR 状态相关函数已移除（TVBox功能已废弃）
 
-  // 连通性体检功能
-  const handleDiagnosis = async () => {
-    setIsDiagnosing(true);
-    try {
-      const response = await fetch('/api/tvbox/diagnose');
-      const result = await response.json();
-      setDiagnosisResult(result);
-
-      if (result.pass) {
-        showAlert({
-          type: 'success',
-          title: '🟢 配置健康检查通过',
-          message: '配置可正常访问，JSON格式有效，连通性良好',
-          timer: 3000,
-        });
-      } else {
-        const issues = result.issues.join('；');
-        showAlert({
-          type: 'error',
-          title: '🔴 配置健康检查失败',
-          message: `发现问题：${issues}`,
-        });
-      }
-    } catch (error) {
-      showAlert({
-        type: 'error',
-        title: '体检失败',
-        message: error instanceof Error ? error.message : '网络错误',
-      });
-    } finally {
-      setIsDiagnosing(false);
-    }
-  };
-
-  const handleTvboxTest = async () => {
-    try {
-      const url = getTvboxConfigUrl();
-      const response = await fetch(url);
-      if (response.ok) {
-        showSuccess('配置测试成功！订阅地址可正常访问', showAlert);
-      } else {
-        throw new Error(`HTTP ${response.status}`);
-      }
-    } catch (err) {
-      showError(
-        `配置测试失败: ${err instanceof Error ? err.message : '网络错误'}`,
-        showAlert
-      );
-    }
-  };
-
-  // JAR 状态相关函数
-  const handleCheckJarStatus = async () => {
-    setIsCheckingJar(true);
-    try {
-      const response = await fetch('/api/tvbox/spider-status');
-      const result = await response.json();
-      setJarStatus(result);
-
-      if (result.success && result.fresh_status.success) {
-        showAlert({
-          type: 'success',
-          title: '🟢 JAR 状态正常',
-          message: `源: ${result.fresh_status.source
-            .split('/')
-            .pop()}, 大小: ${Math.round(result.fresh_status.size / 1024)}KB`,
-          timer: 3000,
-        });
-      } else {
-        showAlert({
-          type: 'warning',
-          title: '⚠️ JAR 状态异常',
-          message: result.fresh_status.is_fallback
-            ? '正在使用内置备用JAR'
-            : '远程JAR获取失败',
-        });
-      }
-    } catch (error) {
-      showAlert({
-        type: 'error',
-        title: 'JAR 状态检查失败',
-        message: error instanceof Error ? error.message : '网络错误',
-      });
-    } finally {
-      setIsCheckingJar(false);
-    }
-  };
-
-  const handleRefreshJar = async () => {
-    setIsRefreshingJar(true);
-    try {
-      const response = await fetch('/api/tvbox/spider-status', {
-        method: 'POST',
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        setJarStatus(result);
-        if (result.jar_status.success) {
-          showAlert({
-            type: 'success',
-            title: '🎉 JAR 刷新成功',
-            message: `已获取新的JAR文件，尝试了 ${result.jar_status.tried_sources} 个源`,
-            timer: 3000,
-          });
-        } else {
-          showAlert({
-            type: 'warning',
-            title: '⚠️ JAR 刷新完成',
-            message: '远程源暂时不可用，正在使用内置备用JAR',
-          });
-        }
-      } else {
-        throw new Error(result.error || 'JAR 刷新失败');
-      }
-    } catch (error) {
-      showAlert({
-        type: 'error',
-        title: 'JAR 刷新失败',
-        message: error instanceof Error ? error.message : '网络错误',
-      });
-    } finally {
-      setIsRefreshingJar(false);
-    }
-  };
+    // TVBox功能已废弃
 
   // 新增: 重置配置处理函数
   const handleResetConfig = () => {
@@ -6206,8 +6050,32 @@ function AdminPageClient() {
   }
 
   if (error) {
-    // 错误已通过弹窗展示，此处直接返回空
-    return null;
+    // 显示错误页面而不是返回null，这样页面内容就不会消失
+    return (
+      <PageLayout activePath='/admin'>
+        <div className='px-2 sm:px-10 py-4 sm:py-8'>
+          <div className='max-w-[95%] mx-auto'>
+            <h1 className='text-2xl font-bold text-gray-900 dark:text-gray-100 mb-8'>
+              管理员设置
+            </h1>
+            <div className='bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6'>
+              <h3 className='text-lg font-medium text-red-800 dark:text-red-300 mb-2'>
+                获取配置失败
+              </h3>
+              <p className='text-red-700 dark:text-red-400 mb-4'>
+                {error}
+              </p>
+              <button 
+                onClick={() => fetchConfig(true)}
+                className={`px-4 py-2 rounded-md transition-colors ${buttonStyles.primary}`}
+              >
+                重试
+              </button>
+            </div>
+          </div>
+        </div>
+      </PageLayout>
+    );
   }
 
   return (
@@ -6386,10 +6254,8 @@ function AdminPageClient() {
                         type='radio'
                         name='tvboxFormat'
                         value='json'
-                        checked={tvboxFormat === 'json'}
-                        onChange={(e) =>
-                          setTvboxFormat(e.target.value as 'json' | 'base64')
-                        }
+                        checked={true} // TVBox功能已废弃
+                        onChange={(e) => console.log('TVBox功能已废弃')}
                         className='mr-2 text-blue-600 focus:ring-blue-500'
                       />
                       <span className='text-sm text-gray-700 dark:text-gray-300'>
@@ -6401,10 +6267,8 @@ function AdminPageClient() {
                         type='radio'
                         name='tvboxFormat'
                         value='base64'
-                        checked={tvboxFormat === 'base64'}
-                        onChange={(e) =>
-                          setTvboxFormat(e.target.value as 'json' | 'base64')
-                        }
+                        checked={false} // TVBox功能已废弃
+                        onChange={(e) => console.log('TVBox功能已废弃')}
                         className='mr-2 text-blue-600 focus:ring-blue-500'
                       />
                       <span className='text-sm text-gray-700 dark:text-gray-300'>
@@ -6425,16 +6289,8 @@ function AdminPageClient() {
                         type='radio'
                         name='tvboxMode'
                         value='standard'
-                        checked={tvboxMode === 'standard'}
-                        onChange={(e) =>
-                          setTvboxMode(
-                            e.target.value as
-                              | 'standard'
-                              | 'safe'
-                              | 'yingshicang'
-                              | 'fast'
-                          )
-                        }
+                        checked={true} // TVBox功能已废弃
+                        onChange={(e) => console.log('TVBox功能已废弃')}
                         className='mt-0.5 text-blue-600 focus:ring-blue-500'
                       />
                       <div>
@@ -6451,16 +6307,8 @@ function AdminPageClient() {
                         type='radio'
                         name='tvboxMode'
                         value='yingshicang'
-                        checked={tvboxMode === 'yingshicang'}
-                        onChange={(e) =>
-                          setTvboxMode(
-                            e.target.value as
-                              | 'standard'
-                              | 'safe'
-                              | 'yingshicang'
-                              | 'fast'
-                          )
-                        }
+                        checked={false} // TVBox功能已废弃
+                        onChange={(e) => console.log('TVBox功能已废弃')}
                         className='mt-0.5 text-blue-600 focus:ring-blue-500'
                       />
                       <div>
@@ -6477,16 +6325,8 @@ function AdminPageClient() {
                         type='radio'
                         name='tvboxMode'
                         value='fast'
-                        checked={tvboxMode === 'fast'}
-                        onChange={(e) =>
-                          setTvboxMode(
-                            e.target.value as
-                              | 'standard'
-                              | 'safe'
-                              | 'yingshicang'
-                              | 'fast'
-                          )
-                        }
+                        checked={false} // TVBox功能已废弃
+                        onChange={(e) => console.log('TVBox功能已废弃')}
                         className='mt-0.5 text-blue-600 focus:ring-blue-500'
                       />
                       <div>
@@ -6503,16 +6343,8 @@ function AdminPageClient() {
                         type='radio'
                         name='tvboxMode'
                         value='safe'
-                        checked={tvboxMode === 'safe'}
-                        onChange={(e) =>
-                          setTvboxMode(
-                            e.target.value as
-                              | 'standard'
-                              | 'safe'
-                              | 'yingshicang'
-                              | 'fast'
-                          )
-                        }
+                        checked={false} // TVBox功能已废弃
+                        onChange={(e) => console.log('TVBox功能已废弃')}
                         className='mt-0.5 text-blue-600 focus:ring-blue-500'
                       />
                       <div>
@@ -6532,16 +6364,16 @@ function AdminPageClient() {
                     type='text'
                     readOnly
                     className='w-full px-3 py-2 rounded-md bg-gray-100 dark:bg-gray-900/40 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700'
-                    value={getTvboxConfigUrl()}
+                    value='TVBox功能已废弃'
                   />
                   <button
-                    onClick={handleTvboxCopy}
+                    onClick={() => console.log('TVBox功能已废弃')}
                     className='px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium'
                   >
                     复制
                   </button>
                   <button
-                    onClick={handleTvboxTest}
+                    onClick={() => console.log('TVBox功能已废弃')}
                     className='px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium'
                   >
                     测试
@@ -6565,7 +6397,7 @@ function AdminPageClient() {
                     {/* 家庭安全模式 */}
                     <button
                       onClick={() => {
-                        const baseUrl = getTvboxConfigUrl().split('?')[0];
+                        const baseUrl = 'TVBox功能已废弃';
                         navigator.clipboard.writeText(baseUrl);
                         showAlert({
                           type: 'success',
@@ -6607,7 +6439,7 @@ function AdminPageClient() {
                     {/* 完整内容模式 */}
                     <button
                       onClick={() => {
-                        const baseUrl = getTvboxConfigUrl().split('?')[0];
+                        const baseUrl = 'TVBox功能已废弃';
                         const fullUrl = `${baseUrl}?filter=off`;
                         navigator.clipboard.writeText(fullUrl);
                         showAlert({
@@ -6678,93 +6510,25 @@ function AdminPageClient() {
                       连通性体检：
                     </span>
                     <button
-                      onClick={handleDiagnosis}
-                      disabled={isDiagnosing}
-                      className={`px-4 py-2 rounded-md transition-colors text-sm font-medium flex items-center space-x-2 ${
-                        isDiagnosing
-                          ? 'bg-gray-400 text-white cursor-not-allowed'
-                          : 'bg-purple-600 hover:bg-purple-700 text-white'
-                      }`}
+                      onClick={() => console.log('诊断功能已废弃')}
+                      disabled={true}
+                      className='px-4 py-2 rounded-md transition-colors text-sm font-medium flex items-center space-x-2 bg-gray-400 text-white cursor-not-allowed'
                     >
-                      {isDiagnosing ? (
-                        <>
-                          <div className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></div>
-                          <span>体检中...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>🩺</span>
-                          <span>一键体检</span>
-                        </>
-                      )}
+                      <span>体检功能已废弃</span>
                     </button>
                   </div>
 
-                  {/* 体检结果展示 */}
-                  {diagnosisResult && (
-                    <div
-                      className={`p-3 rounded-lg border-l-4 ${
-                        diagnosisResult.pass
-                          ? 'bg-green-50 dark:bg-green-900/20 border-green-500 text-green-800 dark:text-green-200'
-                          : 'bg-red-50 dark:bg-red-900/20 border-red-500 text-red-800 dark:text-red-200'
-                      }`}
-                    >
-                      <div className='flex items-center space-x-2 mb-2'>
-                        <span className='text-lg'>
-                          {diagnosisResult.pass ? '🟢' : '🔴'}
-                        </span>
-                        <span className='font-medium text-sm'>
-                          {diagnosisResult.pass ? '体检通过' : '体检失败'}
-                        </span>
-                      </div>
-                      <div className='text-xs space-y-1'>
-                        <div>状态码: {diagnosisResult.status || 'N/A'}</div>
-                        <div>
-                          内容类型: {diagnosisResult.contentType || 'N/A'}
-                        </div>
-                        <div>
-                          JSON有效: {diagnosisResult.hasJson ? '✓' : '✗'}
-                        </div>
-                        {diagnosisResult.issues &&
-                          diagnosisResult.issues.length > 0 && (
-                            <div className='mt-2'>
-                              <div className='font-medium mb-1'>问题:</div>
-                              <ul className='ml-4 list-disc space-y-1'>
-                                {diagnosisResult.issues.map(
-                                  (issue: string, index: number) => (
-                                    <li key={index}>{issue}</li>
-                                  )
-                                )}
-                              </ul>
-                              {diagnosisResult.issues.some(
-                                (issue: string) =>
-                                  issue.includes('spider') ||
-                                  issue.includes('JAR')
-                              ) && (
-                                <div className='mt-3 p-2 bg-purple-100 dark:bg-purple-900/30 rounded border border-purple-300 dark:border-purple-700'>
-                                  <div className='flex items-center justify-between'>
-                                    <span className='text-xs font-medium'>
-                                      💡 建议使用 JAR 源诊断工具查找可用源
-                                    </span>
-                                    <button
-                                      onClick={() =>
-                                        window.open(
-                                          '/api/tvbox/jar-diagnostic',
-                                          '_blank'
-                                        )
-                                      }
-                                      className='px-2 py-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded text-xs font-medium transition-all transform hover:scale-105'
-                                    >
-                                      打开诊断工具
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                      </div>
+                  {/* 体检结果展示 - 已废弃 */}
+                  <div className='p-3 rounded-lg border-l-4 bg-gray-50 dark:bg-gray-900/20 border-gray-500 text-gray-800 dark:text-gray-200'>
+                    <div className='flex items-center space-x-2 mb-2'>
+                      <span className='font-medium text-sm'>
+                        体检功能已废弃
+                      </span>
                     </div>
-                  )}
+                    <div className='text-xs space-y-1'>
+                      <div>该功能已不再可用</div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* JAR 状态监控区域 */}
@@ -6775,51 +6539,23 @@ function AdminPageClient() {
                     </span>
                     <div className='flex space-x-2'>
                       <button
-                        onClick={handleCheckJarStatus}
-                        disabled={isCheckingJar}
-                        className={`px-3 py-2 rounded-md transition-colors text-sm font-medium flex items-center space-x-2 ${
-                          isCheckingJar
-                            ? 'bg-gray-400 text-white cursor-not-allowed'
-                            : 'bg-blue-600 hover:bg-blue-700 text-white'
-                        }`}
+                        onClick={() => console.log('检查JAR状态')}
+                        disabled={false}
+                        className='px-3 py-2 rounded-md transition-colors text-sm font-medium flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white'
                       >
-                        {isCheckingJar ? (
-                          <>
-                            <div className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></div>
-                            <span>检查中...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>🔍</span>
-                            <span>检查状态</span>
-                          </>
-                        )}
+                        <span>🔍</span>
+                        <span>检查状态</span>
                       </button>
                       <button
-                        onClick={handleRefreshJar}
-                        disabled={isRefreshingJar}
-                        className={`px-3 py-2 rounded-md transition-colors text-sm font-medium flex items-center space-x-2 ${
-                          isRefreshingJar
-                            ? 'bg-gray-400 text-white cursor-not-allowed'
-                            : 'bg-orange-600 hover:bg-orange-700 text-white'
-                        }`}
+                        onClick={() => console.log('刷新JAR')}
+                        disabled={false}
+                        className='px-3 py-2 rounded-md transition-colors text-sm font-medium flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white'
                       >
-                        {isRefreshingJar ? (
-                          <>
-                            <div className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></div>
-                            <span>刷新中...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>🔄</span>
-                            <span>强制刷新</span>
-                          </>
-                        )}
+                        <span>🔄</span>
+                        <span>刷新JAR</span>
                       </button>
                       <button
-                        onClick={() =>
-                          window.open('/api/tvbox/jar-diagnostic', '_blank')
-                        }
+                        onClick={() => { console.log('TVBox功能已废弃') }} // TVBox功能已废弃，该功能不可用
                         className='px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 via-pink-500 to-indigo-600 hover:from-purple-700 hover:via-pink-600 hover:to-indigo-700 text-white transition-all text-sm font-medium flex items-center space-x-2 shadow-md hover:shadow-lg transform hover:scale-105'
                       >
                         <span>🔬</span>

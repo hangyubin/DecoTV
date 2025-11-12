@@ -162,25 +162,6 @@ Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS
 Access-Control-Allow-Headers: Content-Type, Cookie
 ```
 
-## 🎯 与 TVBox 配置的区别
-
-| 特性         | OrionTV（LunaTV API） | TVBox/CatVodBox     |
-| ------------ | --------------------- | ------------------- |
-| 配置方式     | API 地址 + 登录       | TVBox 配置 JSON     |
-| 认证         | 需要登录              | 无需登录            |
-| UI           | 现代化原生 App        | WebView/原生混合    |
-| 支持平台     | Apple TV, Android TV  | Android, Android TV |
-| 播放记录同步 | ✅ 支持               | ❌ 不支持           |
-
-### 同时支持两者
-
-DecoTV 同时提供两种方式：
-
-1. **OrionTV API** - 适合 Apple TV 和追求现代化体验的用户
-2. **TVBox 配置** (`/api/tvbox/config`) - 适合 Android 用户和传统 TVBox 客户端
-
-你可以根据设备选择合适的客户端。
-
 ## 📝 技术细节
 
 ### 数据同步

@@ -9,17 +9,40 @@ import { getConfig } from '@/lib/config';
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
+  // 移除本地存储模式的限制，允许本地开发环境访问管理员功能
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-  if (storageType === 'localstorage') {
-    return NextResponse.json(
-      {
-        error: '不支持本地存储进行管理员配置',
-      },
-      { status: 400 }
-    );
-  }
-
+  
   const authInfo = getAuthInfoFromCookie(request);
+  
+  // 对于localstorage模式，检查password字段而不是username
+  if (storageType === 'localstorage') {
+    if (!authInfo || !authInfo.password || authInfo.password !== process.env.ADMIN_PASSWORD) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    // localstorage模式下直接使用owner权限
+    try {
+      const config = await getConfig();
+      return NextResponse.json(
+        { Role: 'owner', Config: config },
+        {
+          headers: {
+            'Cache-Control': 'no-store', // 管理员配置不缓存
+          },
+        }
+      );
+    } catch (error) {
+      console.error('获取管理员配置失败:', error);
+      return NextResponse.json(
+        {
+          error: '获取管理员配置失败',
+          details: (error as Error).message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+  
+  // 非localstorage模式的常规验证
   if (!authInfo || !authInfo.username) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

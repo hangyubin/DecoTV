@@ -98,6 +98,7 @@ function LoginPageClient() {
       .then((res) => res.json())
       .then((data) => {
         const storageType = data.StorageType;
+        // 本地测试模式下（localstorage）不显示用户名输入框
         setShouldAskUsername(!!storageType && storageType !== 'localstorage');
         setRegistrationEnabled(
           data.EnableRegistration && storageType !== 'localstorage'
@@ -105,6 +106,7 @@ function LoginPageClient() {
       })
       .catch(() => {
         // 失败时使用默认值
+        // 默认为本地测试模式，不显示用户名输入框
         setShouldAskUsername(false);
         setRegistrationEnabled(false);
       });
@@ -123,7 +125,8 @@ function LoginPageClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           password,
-          ...(shouldAskUsername ? { username } : {}),
+          // 只在需要时包含用户名
+          ...(shouldAskUsername && username ? { username } : {}),
         }),
       });
 

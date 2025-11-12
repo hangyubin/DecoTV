@@ -125,13 +125,19 @@ export const UserMenu: React.FC = () => {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const auth = getAuthInfoFromBrowserCookie();
+      // 添加调试日志，检查authInfo的内容
+      console.log('Auth info from cookie:', auth);
       setAuthInfo(auth);
 
-      const type =
-        (window as any).RUNTIME_CONFIG?.STORAGE_TYPE || 'localstorage';
+      const type = (window as any).RUNTIME_CONFIG?.STORAGE_TYPE || 'localstorage';
+      // 添加调试日志，检查storageType
+      console.log('Storage type:', type);
       setStorageType(type);
     }
   }, []);
+
+  // 检查是否显示管理面板按钮
+  const showAdminPanel = authInfo?.role === 'owner' || authInfo?.role === 'admin';
 
   // 从 localStorage 读取设置
   useEffect(() => {
@@ -279,7 +285,11 @@ export const UserMenu: React.FC = () => {
   };
 
   const handleAdminPanel = () => {
-    router.push('/admin');
+    setIsOpen(false); // 先关闭菜单
+    // 使用setTimeout确保菜单完全关闭后再跳转
+    setTimeout(() => {
+      router.push('/admin');
+    }, 100);
   };
 
   const handleChangePassword = () => {
@@ -461,9 +471,7 @@ export const UserMenu: React.FC = () => {
     }
   };
 
-  // 检查是否显示管理面板按钮
-  const showAdminPanel =
-    authInfo?.role === 'owner' || authInfo?.role === 'admin';
+  // 管理面板按钮显示条件已在前面定义
 
   // 检查是否显示修改密码按钮
   const showChangePassword =
@@ -905,7 +913,7 @@ export const UserMenu: React.FC = () => {
             <div className='flex items-center justify-between'>
               <div>
                 <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
-                  优选和测速
+                   优选和测速
                 </h4>
                 <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
                   如出现播放器劫持问题可关闭
