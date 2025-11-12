@@ -1,0 +1,5 @@
+/proxy/:path* /api/proxy/:path* 200
+
+# API路由缓存控制
+/api/*
+  Cache-Control: no-store

@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, no-console, @typescript-eslint/no-non-null-assertion */
 
-import * as fs from 'fs';
-import * as path from 'path';
+// 移除Node.js特有模块依赖，适应Cloudflare Pages环境
 
 import { db } from '@/lib/db';
 
@@ -195,17 +194,21 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
 // 读取根目录的config.json文件
 function readRootConfigFile(): ConfigFileStruct {
   try {
-    // 构建绝对路径指向项目根目录的config.json
-    const configFilePath = path.join(process.cwd(), 'config.json');
-    
-    // 检查文件是否存在
-    if (fs.existsSync(configFilePath)) {
-      // 读取并解析文件内容
-      const fileContent = fs.readFileSync(configFilePath, 'utf8');
-      return JSON.parse(fileContent) as ConfigFileStruct;
-    }
+    // 在Cloudflare Pages环境中，我们直接返回默认配置
+    // 避免使用Node.js文件系统API
+    return {
+      cache_time: 7200,
+      subscription: {
+        URL: '',
+        AutoUpdate: false,
+        LastCheck: ''
+      },
+      api_site: {},
+      lives: {},
+      custom_category: []
+    } as ConfigFileStruct;
   } catch (error) {
-    console.error('读取根目录config.json文件失败:', error);
+    console.error('初始化配置失败:', error);
   }
   
   // 如果读取失败，返回空对象

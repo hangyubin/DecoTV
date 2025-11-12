@@ -1,0 +1,19 @@
+# Cloudflare Pages Configuration
+
+# Build settings
+build.command = "pnpm install && pnpm build"
+build.publish = "out"
+build.concurrency = 1
+
+# Cloudflare Pages特定设置
+[pages]
+  # 静态生成模式
+  static = true
+
+# Environment variables
+[env]
+NODE_ENV = "production"
+
+# Optional: Add specific Cloudflare Pages environment variables
+[build.environment]
+NODE_VERSION = "20"
