@@ -101,6 +101,36 @@ function SearchPageClient() {
   const flushTimerRef = useRef<number | null>(null);
   const [useFluidSearch, setUseFluidSearch] = useState(true);
   
+  // 过滤器状态 - 移到前面声明
+  const [filterAll, setFilterAll] = useState({
+    source: 'all',
+    title: 'all',
+    year: 'all',
+    yearOrder: 'none' as const,
+  });
+
+  const [filterAgg, setFilterAgg] = useState({
+    source: 'all',
+    title: 'all',
+    year: 'all',
+    yearOrder: 'none' as const,
+  });
+
+  // 获取默认聚合设置
+  const getDefaultAggregate = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      const userSetting = localStorage.getItem('defaultAggregateSearch');
+      if (userSetting !== null) {
+        return JSON.parse(userSetting);
+      }
+    }
+    return true;
+  }, []);
+
+  const [viewMode, setViewMode] = useState<'agg' | 'all'>(() => {
+    return getDefaultAggregate() ? 'agg' : 'all';
+  });
+  
   // 聚合卡片 refs 与聚合统计缓存
   const groupRefs = useRef<Map<string, React.RefObject<VideoCardHandle>>>(
     new Map()
@@ -249,6 +279,27 @@ function SearchPageClient() {
         setSearchResults((prev) => prev.concat(toAppend));
       });
     }
+  }, []);
+
+  // 简化的年份排序函数
+  const compareYear = useCallback((
+    aYear: string,
+    bYear: string,
+    order: 'none' | 'asc' | 'desc'
+  ) => {
+    if (order === 'none') return 0;
+
+    const aIsEmpty = !aYear || aYear === 'unknown';
+    const bIsEmpty = !bYear || bYear === 'unknown';
+
+    if (aIsEmpty && bIsEmpty) return 0;
+    if (aIsEmpty) return 1;
+    if (bIsEmpty) return -1;
+
+    const aNum = parseInt(aYear, 10);
+    const bNum = parseInt(bYear, 10);
+
+    return order === 'asc' ? aNum - bNum : bNum - aNum;
   }, []);
 
   // 改进的聚合结果计算 - 添加缓存优化
@@ -418,27 +469,6 @@ function SearchPageClient() {
     return result;
   }, [searchResults]);
 
-  // 简化的年份排序函数
-  const compareYear = useCallback((
-    aYear: string,
-    bYear: string,
-    order: 'none' | 'asc' | 'desc'
-  ) => {
-    if (order === 'none') return 0;
-
-    const aIsEmpty = !aYear || aYear === 'unknown';
-    const bIsEmpty = !bYear || bYear === 'unknown';
-
-    if (aIsEmpty && bIsEmpty) return 0;
-    if (aIsEmpty) return 1;
-    if (bIsEmpty) return -1;
-
-    const aNum = parseInt(aYear, 10);
-    const bNum = parseInt(bYear, 10);
-
-    return order === 'asc' ? aNum - bNum : bNum - aNum;
-  }, []);
-
   // 非聚合：应用筛选与排序
   const filteredAllResults = useMemo(() => {
     const { source, title, year, yearOrder } = filterAll;
@@ -504,36 +534,6 @@ function SearchPageClient() {
         : bTitle.localeCompare(aTitle);
     });
   }, [aggregatedResults, filterAgg, searchQuery, compareYear]);
-
-  // 获取默认聚合设置
-  const getDefaultAggregate = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      const userSetting = localStorage.getItem('defaultAggregateSearch');
-      if (userSetting !== null) {
-        return JSON.parse(userSetting);
-      }
-    }
-    return true;
-  }, []);
-
-  const [viewMode, setViewMode] = useState<'agg' | 'all'>(() => {
-    return getDefaultAggregate() ? 'agg' : 'all';
-  });
-
-  // 过滤器状态
-  const [filterAll, setFilterAll] = useState({
-    source: 'all',
-    title: 'all',
-    year: 'all',
-    yearOrder: 'none' as const,
-  });
-
-  const [filterAgg, setFilterAgg] = useState({
-    source: 'all',
-    title: 'all',
-    year: 'all',
-    yearOrder: 'none' as const,
-  });
 
   // 主 useEffect - 优化资源管理
   useEffect(() => {
