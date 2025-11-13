@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps, @typescript-eslint/no-explicit-any,@typescript-eslint/no-non-null-assertion,no-empty */
 'use client';
 
-import { ChevronUp, Search, X } from 'lucide-react';
+import { ChevronUp, Search, X, Film, Tv, HelpCircle, RotateCw } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React, {
   startTransition,
@@ -100,6 +100,9 @@ function SearchPageClient() {
   const pendingResultsRef = useRef<SearchResult[]>([]);
   const flushTimerRef = useRef<number | null>(null);
   const [useFluidSearch, setUseFluidSearch] = useState(true);
+  
+  // 添加搜索状态追踪
+  const [hasSearched, setHasSearched] = useState(false);
   
   // 过滤器状态 - 移到前面声明
   const [filterAll, setFilterAll] = useState({
@@ -228,6 +231,7 @@ function SearchPageClient() {
     setIsLoading(true);
     setShowResults(true);
     setShowSuggestions(false);
+    setHasSearched(true);
 
     router.push(`/search?q=${encodeURIComponent(trimmed)}`);
   }, [searchQuery, router]);
@@ -240,6 +244,7 @@ function SearchPageClient() {
     setIsLoading(true);
     setShowResults(true);
     setShowSuggestions(false);
+    setHasSearched(true);
 
     router.push(`/search?q=${encodeURIComponent(trimmed)}`);
   }, [searchQuery, router]);
@@ -249,6 +254,7 @@ function SearchPageClient() {
     setShowSuggestions(false);
     setIsLoading(true);
     setShowResults(true);
+    setHasSearched(true);
     router.push(`/search?q=${encodeURIComponent(suggestion)}`);
   }, [router]);
 
@@ -535,6 +541,190 @@ function SearchPageClient() {
     });
   }, [aggregatedResults, filterAgg, searchQuery, compareYear]);
 
+  // 渲染优化的加载状态组件
+  const renderLoadingState = () => (
+    <div className="flex flex-col items-center justify-center py-16 gap-4">
+      <div className="relative">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-green-500"></div>
+        <Search className="absolute inset-0 m-auto h-6 w-6 text-green-500" />
+      </div>
+      <div className="text-center">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+          正在搜索中...
+        </h3>
+        {useFluidSearch && totalSources > 0 && (
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            已搜索 {completedSources}/{totalSources} 个来源
+          </div>
+        )}
+        <div className="mt-4 text-sm text-gray-500 dark:text-gray-400 max-w-md">
+          正在从多个数据源搜索 "<span className="font-medium text-green-600">{currentQueryRef.current}</span>"，请稍候...
+        </div>
+      </div>
+    </div>
+  );
+
+  // 渲染空状态组件 - 大幅优化
+  const renderEmptyState = () => {
+    const query = currentQueryRef.current;
+    
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+        <div className="mb-6 relative">
+          <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
+            <HelpCircle className="h-10 w-10 text-gray-400 dark:text-gray-500" />
+          </div>
+        </div>
+        
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3">
+          未找到相关结果
+        </h3>
+        
+        <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md">
+          没有找到与 "<span className="font-medium text-gray-900 dark:text-gray-100">{query}</span>" 相关的影视内容
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 max-w-lg w-full">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <Film className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <span className="font-medium text-blue-900 dark:text-blue-100">搜索建议</span>
+            </div>
+            <ul className="text-sm text-blue-700 dark:text-blue-300 text-left space-y-1">
+              <li>• 检查关键词拼写</li>
+              <li>• 尝试更通用的名称</li>
+              <li>• 使用影片的英文名</li>
+            </ul>
+          </div>
+
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <Tv className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <span className="font-medium text-green-900 dark:text-green-100">其他尝试</span>
+            </div>
+            <ul className="text-sm text-green-700 dark:text-green-300 text-left space-y-1">
+              <li>• 搜索导演或演员</li>
+              <li>• 使用年份+名称</li>
+              <li>• 简化的关键词</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3 justify-center">
+          <button
+            onClick={() => {
+              setSearchQuery('');
+              document.getElementById('searchInput')?.focus();
+            }}
+            className="px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors duration-200 flex items-center gap-2"
+          >
+            <Search className="h-4 w-4" />
+            重新搜索
+          </button>
+          
+          <button
+            onClick={() => {
+              // 清空搜索状态，回到初始状态
+              setSearchResults([]);
+              setShowResults(false);
+              setHasSearched(false);
+              setSearchQuery('');
+            }}
+            className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-full transition-colors duration-200"
+          >
+            返回首页
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // 渲染搜索结果内容
+  const renderSearchResults = () => {
+    if (isLoading) {
+      return renderLoadingState();
+    }
+
+    if (searchResults.length === 0 && hasSearched) {
+      return renderEmptyState();
+    }
+
+    if (searchResults.length > 0) {
+      return (
+        <div
+          key={`search-results-${viewMode}`}
+          className="justify-start grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8"
+        >
+          {viewMode === 'agg'
+            ? filteredAggResults.map(([mapKey, group]) => {
+                const title = group[0]?.title || '';
+                const poster = group[0]?.poster || '';
+                const year = group[0]?.year || 'unknown';
+                const { episodes, source_names, douban_id } =
+                  computeGroupStats(group);
+                const type = episodes === 1 ? 'movie' : 'tv';
+
+                if (!groupStatsRef.current.has(mapKey)) {
+                  groupStatsRef.current.set(mapKey, {
+                    episodes,
+                    source_names,
+                    douban_id,
+                  });
+                }
+
+                return (
+                  <div key={`agg-${mapKey}`} className='w-full'>
+                    <VideoCard
+                      ref={getGroupRef(mapKey)}
+                      from='search'
+                      isAggregate={true}
+                      title={title}
+                      poster={poster}
+                      year={year}
+                      episodes={episodes}
+                      source_names={source_names}
+                      douban_id={douban_id}
+                      query={
+                        searchQuery.trim() !== title
+                          ? searchQuery.trim()
+                          : ''
+                      }
+                      type={type}
+                    />
+                  </div>
+                );
+              })
+            : filteredAllResults.map((item) => (
+                <div
+                  key={`all-${item.source}-${item.id}`}
+                  className='w-full'
+                >
+                  <VideoCard
+                    id={item.id}
+                    title={item.title}
+                    poster={item.poster}
+                    episodes={item.episodes.length}
+                    source={item.source}
+                    source_name={item.source_name}
+                    douban_id={item.douban_id}
+                    query={
+                      searchQuery.trim() !== item.title
+                        ? searchQuery.trim()
+                        : ''
+                    }
+                    year={item.year}
+                    from='search'
+                    type={item.episodes.length > 1 ? 'tv' : 'movie'}
+                  />
+                </div>
+              ))}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   // 主 useEffect - 优化资源管理
   useEffect(() => {
     let isMounted = true;
@@ -586,16 +776,29 @@ function SearchPageClient() {
     };
   }, [searchParams, handleScroll]);
 
-  // 搜索参数变化处理 - 优化资源管理
+  // 搜索参数变化处理 - 优化资源管理，解决闪烁问题
   useEffect(() => {
     let isActive = true;
 
     const query = searchParams.get('q') || '';
-    currentQueryRef.current = query.trim();
+    const trimmedQuery = query.trim();
+    currentQueryRef.current = trimmedQuery;
 
     if (query) {
       setSearchQuery(query);
+      setHasSearched(true);
       
+      // 只有在查询变化时才重置结果，避免重复搜索时的闪烁
+      if (currentQueryRef.current !== trimmedQuery) {
+        setSearchResults([]);
+        setTotalSources(0);
+        setCompletedSources(0);
+        pendingResultsRef.current = [];
+      }
+      
+      setIsLoading(true);
+      setShowResults(true);
+
       // 清理旧连接
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -606,16 +809,6 @@ function SearchPageClient() {
         clearTimeout(flushTimerRef.current);
         flushTimerRef.current = null;
       }
-      
-      setSearchResults([]);
-      setTotalSources(0);
-      setCompletedSources(0);
-      pendingResultsRef.current = [];
-      
-      setIsLoading(true);
-      setShowResults(true);
-
-      const trimmed = query.trim();
 
       // 读取最新设置
       let currentFluidSearch = useFluidSearch;
@@ -637,12 +830,12 @@ function SearchPageClient() {
       if (currentFluidSearch) {
         // 流式搜索
         const es = new EventSource(
-          `/api/search/ws?q=${encodeURIComponent(trimmed)}`
+          `/api/search/ws?q=${encodeURIComponent(trimmedQuery)}`
         );
         eventSourceRef.current = es;
 
         es.onmessage = (event) => {
-          if (!event.data || !isActive || currentQueryRef.current !== trimmed) return;
+          if (!event.data || !isActive || currentQueryRef.current !== trimmedQuery) return;
           
           try {
             const payload = JSON.parse(event.data);
@@ -694,10 +887,10 @@ function SearchPageClient() {
         };
       } else {
         // 传统搜索
-        fetch(`/api/search?q=${encodeURIComponent(trimmed)}`)
+        fetch(`/api/search?q=${encodeURIComponent(trimmedQuery)}`)
           .then((response) => response.json())
           .then((data) => {
-            if (!isActive || currentQueryRef.current !== trimmed) return;
+            if (!isActive || currentQueryRef.current !== trimmedQuery) return;
 
             if (data.results && Array.isArray(data.results)) {
               setSearchResults(data.results as SearchResult[]);
@@ -714,33 +907,17 @@ function SearchPageClient() {
       setShowSuggestions(false);
       addSearchHistory(query);
     } else {
+      // 没有查询参数时，重置状态
       setShowResults(false);
       setShowSuggestions(false);
+      setHasSearched(false);
+      setSearchResults([]);
     }
 
     return () => {
       isActive = false;
     };
   }, [searchParams, useFluidSearch, flushPendingResults, totalSources]);
-
-  // 渲染优化的加载状态组件
-  const renderLoadingState = () => (
-    <div className="flex flex-col items-center justify-center h-40 gap-3">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-      {useFluidSearch && totalSources > 0 && (
-        <div className="text-sm text-gray-500 dark:text-gray-400">
-          正在搜索... ({completedSources}/{totalSources})
-        </div>
-      )}
-    </div>
-  );
-
-  // 渲染空状态组件
-  const renderEmptyState = () => (
-    <div className="text-center text-gray-500 py-8 dark:text-gray-400">
-      未找到相关结果
-    </div>
-  );
 
   return (
     <PageLayout activePath='/search'>
@@ -793,138 +970,68 @@ function SearchPageClient() {
         <div className='max-w-[95%] mx-auto mt-12 overflow-visible'>
           {showResults ? (
             <section className='mb-12'>
-              {/* 标题 */}
-              <div className='mb-4'>
+              {/* 标题和搜索信息 */}
+              <div className='mb-6'>
                 <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
-                  搜索结果
+                  {isLoading ? '搜索中...' : '搜索结果'}
                   {totalSources > 0 && useFluidSearch && (
                     <span className='ml-2 text-sm font-normal text-gray-500 dark:text-gray-400'>
                       {completedSources}/{totalSources}
                     </span>
                   )}
-                  {isLoading && useFluidSearch && (
-                    <span className='ml-2 inline-block align-middle'>
-                      <span className='inline-block h-3 w-3 border-2 border-gray-300 border-t-green-500 rounded-full animate-spin'></span>
-                    </span>
-                  )}
                 </h2>
+                {!isLoading && searchResults.length > 0 && (
+                  <p className='text-sm text-gray-600 dark:text-gray-400 mt-2'>
+                    找到 {viewMode === 'agg' ? filteredAggResults.length : filteredAllResults.length} 个结果
+                    {searchQuery && (
+                      <span>，搜索词: "<span className='font-medium'>{searchQuery}</span>"</span>
+                    )}
+                  </p>
+                )}
               </div>
               
-              {/* 筛选器 + 聚合开关 */}
-              <div className='mb-8 flex items-center justify-between gap-3'>
-                <div className='flex-1 min-w-0'>
-                  {viewMode === 'agg' ? (
-                    <SearchResultFilter
-                      categories={filterOptions.categoriesAgg}
-                      values={filterAgg}
-                      onChange={(v) => setFilterAgg(v as any)}
-                    />
-                  ) : (
-                    <SearchResultFilter
-                      categories={filterOptions.categoriesAll}
-                      values={filterAll}
-                      onChange={(v) => setFilterAll(v as any)}
-                    />
-                  )}
-                </div>
-                
-                {/* 聚合开关 */}
-                <label className='flex items-center gap-2 cursor-pointer select-none shrink-0'>
-                  <span className='text-xs sm:text-sm text-gray-700 dark:text-gray-300'>
-                    聚合
-                  </span>
-                  <div className='relative'>
-                    <input
-                      type='checkbox'
-                      className='sr-only peer'
-                      checked={viewMode === 'agg'}
-                      onChange={() =>
-                        setViewMode(viewMode === 'agg' ? 'all' : 'agg')
-                      }
-                    />
-                    <div className='w-9 h-5 bg-gray-300 rounded-full peer-checked:bg-green-500 transition-colors dark:bg-gray-600'></div>
-                    <div className='absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4'></div>
+              {/* 只有当有结果时才显示筛选器 */}
+              {searchResults.length > 0 && (
+                <div className='mb-8 flex items-center justify-between gap-3'>
+                  <div className='flex-1 min-w-0'>
+                    {viewMode === 'agg' ? (
+                      <SearchResultFilter
+                        categories={filterOptions.categoriesAgg}
+                        values={filterAgg}
+                        onChange={(v) => setFilterAgg(v as any)}
+                      />
+                    ) : (
+                      <SearchResultFilter
+                        categories={filterOptions.categoriesAll}
+                        values={filterAll}
+                        onChange={(v) => setFilterAll(v as any)}
+                      />
+                    )}
                   </div>
-                </label>
-              </div>
-
-              {/* 搜索结果列表 */}
-              {searchResults.length === 0 ? (
-                isLoading ? (
-                  renderLoadingState()
-                ) : (
-                  renderEmptyState()
-                )
-              ) : (
-                <div
-                  key={`search-results-${viewMode}`}
-                  className='justify-start grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'
-                >
-                  {viewMode === 'agg'
-                    ? filteredAggResults.map(([mapKey, group]) => {
-                        const title = group[0]?.title || '';
-                        const poster = group[0]?.poster || '';
-                        const year = group[0]?.year || 'unknown';
-                        const { episodes, source_names, douban_id } =
-                          computeGroupStats(group);
-                        const type = episodes === 1 ? 'movie' : 'tv';
-
-                        if (!groupStatsRef.current.has(mapKey)) {
-                          groupStatsRef.current.set(mapKey, {
-                            episodes,
-                            source_names,
-                            douban_id,
-                          });
+                  
+                  {/* 聚合开关 */}
+                  <label className='flex items-center gap-2 cursor-pointer select-none shrink-0'>
+                    <span className='text-xs sm:text-sm text-gray-700 dark:text-gray-300'>
+                      聚合
+                    </span>
+                    <div className='relative'>
+                      <input
+                        type='checkbox'
+                        className='sr-only peer'
+                        checked={viewMode === 'agg'}
+                        onChange={() =>
+                          setViewMode(viewMode === 'agg' ? 'all' : 'agg')
                         }
-
-                        return (
-                          <div key={`agg-${mapKey}`} className='w-full'>
-                            <VideoCard
-                              ref={getGroupRef(mapKey)}
-                              from='search'
-                              isAggregate={true}
-                              title={title}
-                              poster={poster}
-                              year={year}
-                              episodes={episodes}
-                              source_names={source_names}
-                              douban_id={douban_id}
-                              query={
-                                searchQuery.trim() !== title
-                                  ? searchQuery.trim()
-                                  : ''
-                              }
-                              type={type}
-                            />
-                          </div>
-                        );
-                      })
-                    : filteredAllResults.map((item) => (
-                        <div
-                          key={`all-${item.source}-${item.id}`}
-                          className='w-full'
-                        >
-                          <VideoCard
-                            id={item.id}
-                            title={item.title}
-                            poster={item.poster}
-                            episodes={item.episodes.length}
-                            source={item.source}
-                            source_name={item.source_name}
-                            douban_id={item.douban_id}
-                            query={
-                              searchQuery.trim() !== item.title
-                                ? searchQuery.trim()
-                                : ''
-                            }
-                            year={item.year}
-                            from='search'
-                            type={item.episodes.length > 1 ? 'tv' : 'movie'}
-                          />
-                        </div>
-                      ))}
+                      />
+                      <div className='w-9 h-5 bg-gray-300 rounded-full peer-checked:bg-green-500 transition-colors dark:bg-gray-600'></div>
+                      <div className='absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4'></div>
+                    </div>
+                  </label>
                 </div>
               )}
+
+              {/* 搜索结果内容 */}
+              {renderSearchResults()}
             </section>
           ) : searchHistory.length > 0 ? (
             // 搜索历史
