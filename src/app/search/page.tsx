@@ -10,6 +10,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useCallback,
 } from 'react';
 
 import {
@@ -28,28 +29,56 @@ import SearchResultFilter, {
 import SearchSuggestions from '@/components/SearchSuggestions';
 import VideoCard, { VideoCardHandle } from '@/components/VideoCard';
 
-// 相似度计算函数
-const calculateSimilarity = (str1: string, str2: string): number => {
-  if (!str1 || !str2) return 0;
+// 搜索配置常量
+const SEARCH_CONFIG = {
+  RESULTS_FLUSH_DELAY: 80,
+  SCROLL_THRESHOLD: 300,
+  SIMILARITY_THRESHOLD: 0.7,
+  MAX_CACHE_SIZE: 50,
+} as const;
+
+// 相似度计算函数 - 添加缓存优化
+const calculateSimilarity = (() => {
+  const cache = new Map<string, number>();
   
-  const longer = str1.length > str2.length ? str1 : str2;
-  const shorter = str1.length > str2.length ? str2 : str1;
-  
-  if (longer.length === 0) return 1.0;
-  
-  // 简单的相似度计算：检查较短字符串在较长字符串中的匹配程度
-  let matches = 0;
-  let shorterIndex = 0;
-  
-  for (let i = 0; i < longer.length && shorterIndex < shorter.length; i++) {
-    if (longer[i] === shorter[shorterIndex]) {
-      matches++;
-      shorterIndex++;
+  return (str1: string, str2: string): number => {
+    if (!str1 || !str2) return 0;
+    
+    const cacheKey = `${str1}|${str2}`;
+    if (cache.has(cacheKey)) {
+      return cache.get(cacheKey)!;
     }
-  }
-  
-  return matches / shorter.length;
-};
+    
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    
+    if (longer.length === 0) {
+      cache.set(cacheKey, 1.0);
+      return 1.0;
+    }
+    
+    let matches = 0;
+    let shorterIndex = 0;
+    
+    for (let i = 0; i < longer.length && shorterIndex < shorter.length; i++) {
+      if (longer[i] === shorter[shorterIndex]) {
+        matches++;
+        shorterIndex++;
+      }
+    }
+    
+    const similarity = matches / shorter.length;
+    
+    // 简单的缓存清理
+    if (cache.size > SEARCH_CONFIG.MAX_CACHE_SIZE) {
+      const firstKey = cache.keys().next().value;
+      cache.delete(firstKey);
+    }
+    
+    cache.set(cacheKey, similarity);
+    return similarity;
+  };
+})();
 
 function SearchPageClient() {
   // 搜索历史
@@ -71,6 +100,7 @@ function SearchPageClient() {
   const pendingResultsRef = useRef<SearchResult[]>([]);
   const flushTimerRef = useRef<number | null>(null);
   const [useFluidSearch, setUseFluidSearch] = useState(true);
+  
   // 聚合卡片 refs 与聚合统计缓存
   const groupRefs = useRef<Map<string, React.RefObject<VideoCardHandle>>>(
     new Map()
@@ -82,16 +112,23 @@ function SearchPageClient() {
     >
   >(new Map());
 
-  const getGroupRef = (key: string) => {
+  // 聚合结果缓存
+  const aggregationCacheRef = useRef<{
+    key: string;
+    results: [string, SearchResult[]][];
+  }>({ key: '', results: [] });
+
+  // 使用 useCallback 优化函数
+  const getGroupRef = useCallback((key: string) => {
     let ref = groupRefs.current.get(key);
     if (!ref) {
       ref = React.createRef<VideoCardHandle>();
       groupRefs.current.set(key, ref);
     }
     return ref;
-  };
+  }, []);
 
-  const computeGroupStats = (group: SearchResult[]) => {
+  const computeGroupStats = useCallback((group: SearchResult[]) => {
     const episodes = (() => {
       const countMap = new Map<number, number>();
       group.forEach((g) => {
@@ -108,6 +145,7 @@ function SearchPageClient() {
       });
       return res;
     })();
+    
     const source_names = Array.from(
       new Set(group.map((g) => g.source_name).filter(Boolean))
     ) as string[];
@@ -131,83 +169,107 @@ function SearchPageClient() {
     })();
 
     return { episodes, source_names, douban_id };
-  };
+  }, []);
 
-  // 过滤器：非聚合与聚合
-  const [filterAll, setFilterAll] = useState<{
-    source: string;
-    title: string;
-    year: string;
-    yearOrder: 'none' | 'asc' | 'desc';
-  }>({
-    source: 'all',
-    title: 'all',
-    year: 'all',
-    yearOrder: 'none',
-  });
-  const [filterAgg, setFilterAgg] = useState<{
-    source: string;
-    title: string;
-    year: string;
-    yearOrder: 'none' | 'asc' | 'desc';
-  }>({
-    source: 'all',
-    title: 'all',
-    year: 'all',
-    yearOrder: 'none',
-  });
+  // 使用 useCallback 优化事件处理函数
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
 
-  // 获取默认聚合设置：只读取用户本地设置，默认为 true
-  const getDefaultAggregate = () => {
-    if (typeof window !== 'undefined') {
-      const userSetting = localStorage.getItem('defaultAggregateSearch');
-      if (userSetting !== null) {
-        return JSON.parse(userSetting);
-      }
+    if (value.trim()) {
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
     }
-    return true; // 默认启用聚合
-  };
+  }, []);
 
-  const [viewMode, setViewMode] = useState<'agg' | 'all'>(() => {
-    return getDefaultAggregate() ? 'agg' : 'all';
-  });
+  const handleInputFocus = useCallback(() => {
+    if (searchQuery.trim()) {
+      setShowSuggestions(true);
+    }
+  }, [searchQuery]);
 
-  // 简化的年份排序：unknown/空值始终在最后
-  const compareYear = (
-    aYear: string,
-    bYear: string,
-    order: 'none' | 'asc' | 'desc'
-  ) => {
-    // 如果是无排序状态，返回0（保持原顺序）
-    if (order === 'none') return 0;
+  const handleSearch = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = searchQuery.trim().replace(/\s+/g, ' ');
+    if (!trimmed) return;
 
-    // 处理空值和unknown
-    const aIsEmpty = !aYear || aYear === 'unknown';
-    const bIsEmpty = !bYear || bYear === 'unknown';
+    setSearchQuery(trimmed);
+    setIsLoading(true);
+    setShowResults(true);
+    setShowSuggestions(false);
 
-    if (aIsEmpty && bIsEmpty) return 0;
-    if (aIsEmpty) return 1; // a 在后
-    if (bIsEmpty) return -1; // b 在后
+    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  }, [searchQuery, router]);
 
-    // 都是有效年份，按数字比较
-    const aNum = parseInt(aYear, 10);
-    const bNum = parseInt(bYear, 10);
+  const handleEnterKey = useCallback(() => {
+    const trimmed = searchQuery.trim().replace(/\s+/g, ' ');
+    if (!trimmed) return;
 
-    return order === 'asc' ? aNum - bNum : bNum - aNum;
-  };
+    setSearchQuery(trimmed);
+    setIsLoading(true);
+    setShowResults(true);
+    setShowSuggestions(false);
 
-  // 改进的聚合结果计算 - 更全面的模糊匹配
+    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  }, [searchQuery, router]);
+
+  const handleSuggestionSelect = useCallback((suggestion: string) => {
+    setSearchQuery(suggestion);
+    setShowSuggestions(false);
+    setIsLoading(true);
+    setShowResults(true);
+    router.push(`/search?q=${encodeURIComponent(suggestion)}`);
+  }, [router]);
+
+  // 优化滚动处理函数
+  const handleScroll = useCallback(() => {
+    const scrollTop = document.body.scrollTop || 0;
+    setShowBackToTop(scrollTop > SEARCH_CONFIG.SCROLL_THRESHOLD);
+  }, []);
+
+  // 返回顶部功能
+  const scrollToTop = useCallback(() => {
+    try {
+      document.body.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      });
+    } catch (error) {
+      document.body.scrollTop = 0;
+    }
+  }, []);
+
+  // 优化结果刷新逻辑
+  const flushPendingResults = useCallback(() => {
+    if (pendingResultsRef.current.length > 0) {
+      const toAppend = pendingResultsRef.current;
+      pendingResultsRef.current = [];
+      startTransition(() => {
+        setSearchResults((prev) => prev.concat(toAppend));
+      });
+    }
+  }, []);
+
+  // 改进的聚合结果计算 - 添加缓存优化
   const aggregatedResults = useMemo(() => {
     const query = currentQueryRef.current.trim().toLowerCase();
     
-    // 如果查询为空，返回空数组
     if (!query) return [];
 
-    // 改进的匹配逻辑：使用多种匹配策略
+    // 检查缓存
+    const cacheKey = `${query}-${searchResults.length}-${searchResults
+      .slice(0, 3)
+      .map(r => r.id)
+      .join('-')}`;
+    
+    if (aggregationCacheRef.current.key === cacheKey) {
+      return aggregationCacheRef.current.results;
+    }
+
     const relevantResults = searchResults.filter((item) => {
       const title = item.title.toLowerCase();
       
-      // 如果查询很短，使用更宽松的匹配
       if (query.length <= 2) {
         return (
           title.includes(query) ||
@@ -215,44 +277,27 @@ function SearchPageClient() {
         );
       }
 
-      // 多种匹配策略
       const matchStrategies = [
-        // 1. 完全匹配
         title === query,
-        
-        // 2. 包含匹配
         title.includes(query),
-        
-        // 3. 移除标点符号和空格后匹配
         title.replace(/[^\w\u4e00-\u9fa5]/g, '').includes(query.replace(/[^\w\u4e00-\u9fa5]/g, '')),
-        
-        // 4. 开头匹配
         title.startsWith(query),
-        
-        // 5. 结尾匹配
         title.endsWith(query),
-        
-        // 6. 分词匹配（针对中文）
         ...(query.length > 1 ? [
-          // 将查询词拆分为单个字符，检查是否都出现在标题中
           query.split('').every(char => title.includes(char)),
         ] : []),
-        
-        // 7. 编辑距离匹配（简单的相似度计算）
         ...(query.length > 2 ? [
-          calculateSimilarity(title, query) > 0.7,
+          calculateSimilarity(title, query) > SEARCH_CONFIG.SIMILARITY_THRESHOLD,
         ] : []),
       ];
 
       return matchStrategies.some(match => match);
     });
 
-    // 改进的聚合逻辑：使用更精确的分组键
     const map = new Map<string, SearchResult[]>();
     const keyOrder: string[] = [];
 
     relevantResults.forEach((item) => {
-      // 使用标准化的标题、年份和类型作为键
       const normalizedTitle = item.title.trim().toLowerCase().replace(/\s+/g, '');
       const year = item.year || 'unknown';
       const type = item.episodes.length === 1 ? 'movie' : 'tv';
@@ -268,9 +313,13 @@ function SearchPageClient() {
       map.set(key, arr);
     });
 
-    return keyOrder.map(
+    const results = keyOrder.map(
       (key) => [key, map.get(key)!] as [string, SearchResult[]]
     );
+
+    // 更新缓存
+    aggregationCacheRef.current = { key: cacheKey, results };
+    return results;
   }, [searchResults]);
 
   // 当聚合结果变化时，如果某个聚合已存在，则调用其卡片 ref 的 set 方法增量更新
@@ -279,11 +328,10 @@ function SearchPageClient() {
       const stats = computeGroupStats(group);
       const prev = groupStatsRef.current.get(mapKey);
       if (!prev) {
-        // 第一次出现，记录初始值，不调用 ref（由初始 props 渲染）
         groupStatsRef.current.set(mapKey, stats);
         return;
       }
-      // 对比变化并调用对应的 set 方法
+      
       const ref = groupRefs.current.get(mapKey);
       if (ref && ref.current) {
         if (prev.episodes !== stats.episodes) {
@@ -300,10 +348,17 @@ function SearchPageClient() {
         groupStatsRef.current.set(mapKey, stats);
       }
     });
-  }, [aggregatedResults]);
+  }, [aggregatedResults, computeGroupStats]);
 
-  // 构建筛选选项
+  // 构建筛选选项 - 添加缓存优化
   const filterOptions = useMemo(() => {
+    const cacheKey = searchResults.map(r => `${r.source}-${r.title}-${r.year}`).join('|');
+    const cached = sessionStorage.getItem(`filterOptions-${cacheKey}`);
+    
+    if (cached) {
+      return JSON.parse(cached);
+    }
+
     const sourcesSet = new Map<string, string>();
     const titlesSet = new Set<string>();
     const yearsSet = new Set<string>();
@@ -316,27 +371,26 @@ function SearchPageClient() {
       if (item.year) yearsSet.add(item.year);
     });
 
-    const sourceOptions: { label: string; value: string }[] = [
+    const sourceOptions = [
       { label: '全部来源', value: 'all' },
       ...Array.from(sourcesSet.entries())
         .sort((a, b) => a[1].localeCompare(b[1]))
         .map(([value, label]) => ({ label, value })),
     ];
 
-    const titleOptions: { label: string; value: string }[] = [
+    const titleOptions = [
       { label: '全部标题', value: 'all' },
       ...Array.from(titlesSet.values())
         .sort((a, b) => a.localeCompare(b))
         .map((t) => ({ label: t, value: t })),
     ];
 
-    // 年份: 将 unknown 放末尾
     const years = Array.from(yearsSet.values());
     const knownYears = years
       .filter((y) => y !== 'unknown')
       .sort((a, b) => parseInt(b) - parseInt(a));
     const hasUnknown = years.includes('unknown');
-    const yearOptions: { label: string; value: string }[] = [
+    const yearOptions = [
       { label: '全部年份', value: 'all' },
       ...knownYears.map((y) => ({ label: y, value: y })),
       ...(hasUnknown ? [{ label: '未知', value: 'unknown' }] : []),
@@ -354,8 +408,36 @@ function SearchPageClient() {
       { key: 'year', label: '年份', options: yearOptions },
     ];
 
-    return { categoriesAll, categoriesAgg };
+    const result = { categoriesAll, categoriesAgg };
+    
+    // 缓存结果
+    if (searchResults.length > 0) {
+      sessionStorage.setItem(`filterOptions-${cacheKey}`, JSON.stringify(result));
+    }
+    
+    return result;
   }, [searchResults]);
+
+  // 简化的年份排序函数
+  const compareYear = useCallback((
+    aYear: string,
+    bYear: string,
+    order: 'none' | 'asc' | 'desc'
+  ) => {
+    if (order === 'none') return 0;
+
+    const aIsEmpty = !aYear || aYear === 'unknown';
+    const bIsEmpty = !bYear || bYear === 'unknown';
+
+    if (aIsEmpty && bIsEmpty) return 0;
+    if (aIsEmpty) return 1;
+    if (bIsEmpty) return -1;
+
+    const aNum = parseInt(aYear, 10);
+    const bNum = parseInt(bYear, 10);
+
+    return order === 'asc' ? aNum - bNum : bNum - aNum;
+  }, []);
 
   // 非聚合：应用筛选与排序
   const filteredAllResults = useMemo(() => {
@@ -367,29 +449,24 @@ function SearchPageClient() {
       return true;
     });
 
-    // 如果是无排序状态，直接返回过滤后的原始顺序
     if (yearOrder === 'none') {
       return filtered;
     }
 
-    // 简化排序：1. 年份排序，2. 年份相同时精确匹配在前，3. 标题排序
     return filtered.sort((a, b) => {
-      // 首先按年份排序
       const yearComp = compareYear(a.year, b.year, yearOrder);
       if (yearComp !== 0) return yearComp;
 
-      // 年份相同时，精确匹配在前
       const aExactMatch = a.title === searchQuery.trim();
       const bExactMatch = b.title === searchQuery.trim();
       if (aExactMatch && !bExactMatch) return -1;
       if (!aExactMatch && bExactMatch) return 1;
 
-      // 最后按标题排序，正序时字母序，倒序时反字母序
       return yearOrder === 'asc'
         ? a.title.localeCompare(b.title)
         : b.title.localeCompare(a.title);
     });
-  }, [searchResults, filterAll, searchQuery]);
+  }, [searchResults, filterAll, searchQuery, compareYear]);
 
   // 聚合：应用筛选与排序
   const filteredAggResults = useMemo(() => {
@@ -405,40 +482,70 @@ function SearchPageClient() {
       return true;
     });
 
-    // 如果是无排序状态，保持按关键字+年份+类型出现的原始顺序
     if (yearOrder === 'none') {
       return filtered;
     }
 
-    // 简化排序：1. 年份排序，2. 年份相同时精确匹配在前，3. 标题排序
     return filtered.sort((a, b) => {
-      // 首先按年份排序
       const aYear = a[1][0].year;
       const bYear = b[1][0].year;
       const yearComp = compareYear(aYear, bYear, yearOrder);
       if (yearComp !== 0) return yearComp;
 
-      // 年份相同时，精确匹配在前
       const aExactMatch = a[1][0].title === searchQuery.trim();
       const bExactMatch = b[1][0].title === searchQuery.trim();
       if (aExactMatch && !bExactMatch) return -1;
       if (!aExactMatch && bExactMatch) return 1;
 
-      // 最后按标题排序，正序时字母序，倒序时反字母序
       const aTitle = a[1][0].title;
       const bTitle = b[1][0].title;
       return yearOrder === 'asc'
         ? aTitle.localeCompare(bTitle)
         : bTitle.localeCompare(aTitle);
     });
-  }, [aggregatedResults, filterAgg, searchQuery]);
+  }, [aggregatedResults, filterAgg, searchQuery, compareYear]);
 
+  // 获取默认聚合设置
+  const getDefaultAggregate = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      const userSetting = localStorage.getItem('defaultAggregateSearch');
+      if (userSetting !== null) {
+        return JSON.parse(userSetting);
+      }
+    }
+    return true;
+  }, []);
+
+  const [viewMode, setViewMode] = useState<'agg' | 'all'>(() => {
+    return getDefaultAggregate() ? 'agg' : 'all';
+  });
+
+  // 过滤器状态
+  const [filterAll, setFilterAll] = useState({
+    source: 'all',
+    title: 'all',
+    year: 'all',
+    yearOrder: 'none' as const,
+  });
+
+  const [filterAgg, setFilterAgg] = useState({
+    source: 'all',
+    title: 'all',
+    year: 'all',
+    yearOrder: 'none' as const,
+  });
+
+  // 主 useEffect - 优化资源管理
   useEffect(() => {
+    let isMounted = true;
+
     // 无搜索参数时聚焦搜索框
     !searchParams.get('q') && document.getElementById('searchInput')?.focus();
 
     // 初始加载搜索历史
-    getSearchHistory().then(setSearchHistory);
+    getSearchHistory().then((history) => {
+      if (isMounted) setSearchHistory(history);
+    });
 
     // 读取流式搜索设置
     if (typeof window !== 'undefined') {
@@ -456,59 +563,61 @@ function SearchPageClient() {
     const unsubscribe = subscribeToDataUpdates(
       'searchHistoryUpdated',
       (newHistory: string[]) => {
-        setSearchHistory(newHistory);
+        if (isMounted) setSearchHistory(newHistory);
       }
     );
 
-    // 获取滚动位置的函数 - 专门针对 body 滚动
-    const getScrollTop = () => {
-      return document.body.scrollTop || 0;
-    };
-
-    // 监听 body 元素的滚动事件
-    const handleScroll = () => {
-      const scrollTop = getScrollTop();
-      setShowBackToTop(scrollTop > 300);
-    };
-
+    // 监听滚动事件
     document.body.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
+      isMounted = false;
       unsubscribe();
-      // 移除 body 滚动事件监听器
       document.body.removeEventListener('scroll', handleScroll);
+      
+      // 清理所有资源
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+      }
+      pendingResultsRef.current = [];
     };
-  }, []);
+  }, [searchParams, handleScroll]);
 
+  // 搜索参数变化处理 - 优化资源管理
   useEffect(() => {
-    // 当搜索参数变化时更新搜索状态
+    let isActive = true;
+
     const query = searchParams.get('q') || '';
     currentQueryRef.current = query.trim();
 
     if (query) {
       setSearchQuery(query);
-      // 新搜索：关闭旧连接并清空结果
+      
+      // 清理旧连接
       if (eventSourceRef.current) {
-        try {
-          eventSourceRef.current.close();
-        } catch {}
+        eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      setSearchResults([]);
-      setTotalSources(0);
-      setCompletedSources(0);
-      // 清理缓冲
-      pendingResultsRef.current = [];
+      
       if (flushTimerRef.current) {
         clearTimeout(flushTimerRef.current);
         flushTimerRef.current = null;
       }
+      
+      setSearchResults([]);
+      setTotalSources(0);
+      setCompletedSources(0);
+      pendingResultsRef.current = [];
+      
       setIsLoading(true);
       setShowResults(true);
 
       const trimmed = query.trim();
 
-      // 每次搜索时重新读取设置，确保使用最新的配置
+      // 读取最新设置
       let currentFluidSearch = useFluidSearch;
       if (typeof window !== 'undefined') {
         const savedFluidSearch = localStorage.getItem('fluidSearch');
@@ -521,93 +630,74 @@ function SearchPageClient() {
         }
       }
 
-      // 如果读取的配置与当前状态不同，更新状态
       if (currentFluidSearch !== useFluidSearch) {
         setUseFluidSearch(currentFluidSearch);
       }
 
-      const flushPendingResults = () => {
-        if (pendingResultsRef.current.length > 0) {
-          const toAppend = pendingResultsRef.current;
-          pendingResultsRef.current = [];
-          startTransition(() => {
-            setSearchResults((prev) => prev.concat(toAppend));
-          });
-        }
-      };
-
       if (currentFluidSearch) {
-        // 流式搜索：打开新的流式连接
+        // 流式搜索
         const es = new EventSource(
           `/api/search/ws?q=${encodeURIComponent(trimmed)}`
         );
         eventSourceRef.current = es;
 
         es.onmessage = (event) => {
-          if (!event.data) return;
+          if (!event.data || !isActive || currentQueryRef.current !== trimmed) return;
+          
           try {
             const payload = JSON.parse(event.data);
-            if (currentQueryRef.current !== trimmed) return;
+            
             switch (payload.type) {
               case 'start':
                 setTotalSources(payload.totalSources || 0);
                 setCompletedSources(0);
                 break;
-              case 'source_result': {
+              case 'source_result':
                 setCompletedSources((prev) => prev + 1);
-                if (
-                  Array.isArray(payload.results) &&
-                  payload.results.length > 0
-                ) {
-                  // 缓冲新增结果，节流刷入，避免频繁重渲染导致闪烁
-                  const incoming: SearchResult[] =
-                    payload.results as SearchResult[];
-                  pendingResultsRef.current.push(...incoming);
+                if (payload.results?.length) {
+                  pendingResultsRef.current.push(...payload.results);
                   if (!flushTimerRef.current) {
                     flushTimerRef.current = window.setTimeout(() => {
                       flushPendingResults();
                       flushTimerRef.current = null;
-                    }, 80);
+                    }, SEARCH_CONFIG.RESULTS_FLUSH_DELAY);
                   }
                 }
                 break;
-              }
               case 'source_error':
                 setCompletedSources((prev) => prev + 1);
                 break;
               case 'complete':
                 setCompletedSources(payload.completedSources || totalSources);
-                // 完成前确保将缓冲写入
                 flushPendingResults();
                 setIsLoading(false);
-                try {
-                  es.close();
-                } catch {}
+                es.close();
                 if (eventSourceRef.current === es) {
                   eventSourceRef.current = null;
                 }
                 break;
             }
-          } catch {}
+          } catch (error) {
+            console.error('Parse search event error:', error);
+          }
         };
 
         es.onerror = () => {
-          setIsLoading(false);
-          // 错误时也清空缓冲
-          flushPendingResults();
-          try {
+          if (isActive) {
+            setIsLoading(false);
+            flushPendingResults();
             es.close();
-          } catch {}
-          if (eventSourceRef.current === es) {
-            eventSourceRef.current = null;
+            if (eventSourceRef.current === es) {
+              eventSourceRef.current = null;
+            }
           }
         };
       } else {
-        // 传统搜索：使用普通接口
+        // 传统搜索
         fetch(`/api/search?q=${encodeURIComponent(trimmed)}`)
           .then((response) => response.json())
           .then((data) => {
-            if (currentQueryRef.current !== trimmed) return;
+            if (!isActive || currentQueryRef.current !== trimmed) return;
 
             if (data.results && Array.isArray(data.results)) {
               setSearchResults(data.results as SearchResult[]);
@@ -617,107 +707,40 @@ function SearchPageClient() {
             setIsLoading(false);
           })
           .catch(() => {
-            setIsLoading(false);
+            if (isActive) setIsLoading(false);
           });
       }
+      
       setShowSuggestions(false);
-
-      // 保存到搜索历史 (事件监听会自动更新界面)
       addSearchHistory(query);
     } else {
       setShowResults(false);
       setShowSuggestions(false);
     }
-  }, [searchParams]);
 
-  // 组件卸载时，关闭可能存在的连接
-  useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        try {
-          eventSourceRef.current.close();
-        } catch {}
-        eventSourceRef.current = null;
-      }
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
-      pendingResultsRef.current = [];
+      isActive = false;
     };
-  }, []);
+  }, [searchParams, useFluidSearch, flushPendingResults, totalSources]);
 
-  // 输入框内容变化时触发，显示搜索建议
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchQuery(value);
+  // 渲染优化的加载状态组件
+  const renderLoadingState = () => (
+    <div className="flex flex-col items-center justify-center h-40 gap-3">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+      {useFluidSearch && totalSources > 0 && (
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          正在搜索... ({completedSources}/{totalSources})
+        </div>
+      )}
+    </div>
+  );
 
-    if (value.trim()) {
-      setShowSuggestions(true);
-    } else {
-      setShowSuggestions(false);
-    }
-  };
-
-  // 搜索框聚焦时触发，显示搜索建议
-  const handleInputFocus = () => {
-    if (searchQuery.trim()) {
-      setShowSuggestions(true);
-    }
-  };
-
-  // 搜索表单提交时触发，处理搜索逻辑
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = searchQuery.trim().replace(/\s+/g, ' ');
-    if (!trimmed) return;
-
-    // 回显搜索框
-    setSearchQuery(trimmed);
-    setIsLoading(true);
-    setShowResults(true);
-    setShowSuggestions(false);
-
-    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
-  };
-
-  // 修复：为 onEnterKey 创建一个没有参数的函数
-  const handleEnterKey = () => {
-    const trimmed = searchQuery.trim().replace(/\s+/g, ' ');
-    if (!trimmed) return;
-
-    setSearchQuery(trimmed);
-    setIsLoading(true);
-    setShowResults(true);
-    setShowSuggestions(false);
-
-    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
-  };
-
-  const handleSuggestionSelect = (suggestion: string) => {
-    setSearchQuery(suggestion);
-    setShowSuggestions(false);
-
-    // 自动执行搜索
-    setIsLoading(true);
-    setShowResults(true);
-
-    router.push(`/search?q=${encodeURIComponent(suggestion)}`);
-  };
-
-  // 返回顶部功能
-  const scrollToTop = () => {
-    try {
-      // 根据调试结果，真正的滚动容器是 document.body
-      document.body.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      });
-    } catch (error) {
-      // 如果平滑滚动完全失败，使用立即滚动
-      document.body.scrollTop = 0;
-    }
-  };
+  // 渲染空状态组件
+  const renderEmptyState = () => (
+    <div className="text-center text-gray-500 py-8 dark:text-gray-400">
+      未找到相关结果
+    </div>
+  );
 
   return (
     <PageLayout activePath='/search'>
@@ -786,7 +809,8 @@ function SearchPageClient() {
                   )}
                 </h2>
               </div>
-              {/* 筛选器 + 聚合开关 同行 */}
+              
+              {/* 筛选器 + 聚合开关 */}
               <div className='mb-8 flex items-center justify-between gap-3'>
                 <div className='flex-1 min-w-0'>
                   {viewMode === 'agg' ? (
@@ -803,6 +827,7 @@ function SearchPageClient() {
                     />
                   )}
                 </div>
+                
                 {/* 聚合开关 */}
                 <label className='flex items-center gap-2 cursor-pointer select-none shrink-0'>
                   <span className='text-xs sm:text-sm text-gray-700 dark:text-gray-300'>
@@ -822,15 +847,13 @@ function SearchPageClient() {
                   </div>
                 </label>
               </div>
+
+              {/* 搜索结果列表 */}
               {searchResults.length === 0 ? (
                 isLoading ? (
-                  <div className='flex justify-center items-center h-40'>
-                    <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-green-500'></div>
-                  </div>
+                  renderLoadingState()
                 ) : (
-                  <div className='text-center text-gray-500 py-8 dark:text-gray-400'>
-                    未找到相关结果
-                  </div>
+                  renderEmptyState()
                 )
               ) : (
                 <div
@@ -846,7 +869,6 @@ function SearchPageClient() {
                           computeGroupStats(group);
                         const type = episodes === 1 ? 'movie' : 'tv';
 
-                        // 如果该聚合第一次出现，写入初始统计
                         if (!groupStatsRef.current.has(mapKey)) {
                           groupStatsRef.current.set(mapKey, {
                             episodes,
@@ -912,7 +934,7 @@ function SearchPageClient() {
                 {searchHistory.length > 0 && (
                   <button
                     onClick={() => {
-                      clearSearchHistory(); // 事件监听会自动更新界面
+                      clearSearchHistory();
                     }}
                     className='ml-3 text-sm text-gray-500 hover:text-red-500 transition-colors dark:text-gray-400 dark:hover:text-red-500'
                   >
@@ -940,7 +962,7 @@ function SearchPageClient() {
                       onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
-                        deleteSearchHistory(item); // 事件监听会自动更新界面
+                        deleteSearchHistory(item);
                       }}
                       className='absolute -top-1 -right-1 w-4 h-4 opacity-0 group-hover:opacity-100 bg-gray-400 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] transition-colors'
                     >
