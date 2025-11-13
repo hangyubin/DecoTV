@@ -6,7 +6,7 @@ import Artplayer from 'artplayer';
 import Hls from 'hls.js';
 import { Heart, Radio, Tv } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   deleteFavorite,
@@ -49,6 +49,13 @@ interface LiveSource {
   disabled?: boolean;
 }
 
+// API 响应类型
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
 function LivePageClient() {
   // -----------------------------------------------------------------------------
   // 状态变量（State）
@@ -78,8 +85,8 @@ function LivePageClient() {
     currentChannelRef.current = currentChannel;
   }, [currentChannel]);
 
-  const [needLoadSource] = useState(searchParams.get('source'));
-  const [needLoadChannel] = useState(searchParams.get('id'));
+  const needLoadSource = useMemo(() => searchParams.get('source'), [searchParams]);
+  const needLoadChannel = useMemo(() => searchParams.get('id'), [searchParams]);
 
   // 播放器相关
   const [videoUrl, setVideoUrl] = useState('');
@@ -122,8 +129,59 @@ function LivePageClient() {
   const favoritedRef = useRef(false);
   const currentChannelRef = useRef<LiveChannel | null>(null);
 
-  // EPG数据清洗函数 - 去除重叠的节目，保留时间较短的，只显示今日节目
-  const cleanEpgData = (programs: Array<{ start: string; end: string; title: string }>) => {
+  // 播放器引用
+  const artPlayerRef = useRef<any>(null);
+  const artRef = useRef<HTMLDivElement | null>(null);
+
+  // 分组标签滚动相关
+  const groupContainerRef = useRef<HTMLDivElement>(null);
+  const groupButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const channelListRef = useRef<HTMLDivElement>(null);
+
+  // AbortController 用于取消请求
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // -----------------------------------------------------------------------------
+  // 工具函数（Utils）
+  // -----------------------------------------------------------------------------
+
+  // 创建新的 AbortController
+  const createAbortController = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    return abortControllerRef.current;
+  }, []);
+
+  // 带重试的 fetch 函数
+  const fetchWithRetry = useCallback(async (url: string, options: RequestInit = {}, retries = 3): Promise<Response> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const controller = createAbortController();
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+        });
+        
+        if (response.ok) {
+          return response;
+        }
+        
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      } catch (error) {
+        if (i === retries - 1) throw error;
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        
+        // 指数退避延迟
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+      }
+    }
+    throw new Error('Max retries exceeded');
+  }, [createAbortController]);
+
+  // EPG数据清洗函数 - 使用 useMemo 优化
+  const cleanEpgData = useCallback((programs: Array<{ start: string; end: string; title: string }>) => {
     if (!programs || programs.length === 0) return programs;
 
     // 获取今日日期（只考虑年月日，忽略时间）
@@ -211,39 +269,26 @@ function LivePageClient() {
     }
 
     return cleanedPrograms;
-  };
-
-  // 播放器引用
-  const artPlayerRef = useRef<any>(null);
-  const artRef = useRef<HTMLDivElement | null>(null);
-
-  // 分组标签滚动相关
-  const groupContainerRef = useRef<HTMLDivElement>(null);
-  const groupButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const channelListRef = useRef<HTMLDivElement>(null);
-
-  // -----------------------------------------------------------------------------
-  // 工具函数（Utils）
-  // -----------------------------------------------------------------------------
+  }, []);
 
   // 获取直播源列表
-  const fetchLiveSources = async () => {
+  const fetchLiveSources = useCallback(async () => {
     try {
       setLoadingStage('fetching');
       setLoadingMessage('正在获取直播源...');
 
       // 获取 AdminConfig 中的直播源信息
-      const response = await fetch('/api/live/sources');
+      const response = await fetchWithRetry('/api/live/sources');
       if (!response.ok) {
         throw new Error('获取直播源失败');
       }
 
-      const result = await response.json();
+      const result: ApiResponse<LiveSource[]> = await response.json();
       if (!result.success) {
         throw new Error(result.error || '获取直播源失败');
       }
 
-      const sources = result.data;
+      const sources = result.data || [];
       setLiveSources(sources);
 
       if (sources.length > 0) {
@@ -287,25 +332,25 @@ function LivePageClient() {
 
       router.replace(newUrl);
     }
-  };
+  }, [fetchWithRetry, needLoadSource, searchParams, router]);
 
   // 获取频道列表
-  const fetchChannels = async (source: LiveSource) => {
+  const fetchChannels = useCallback(async (source: LiveSource) => {
     try {
       setIsVideoLoading(true);
 
       // 从 cachedLiveChannels 获取频道信息
-      const response = await fetch(`/api/live/channels?source=${source.key}`);
+      const response = await fetchWithRetry(`/api/live/channels?source=${source.key}`);
       if (!response.ok) {
         throw new Error('获取频道列表失败');
       }
 
-      const result = await response.json();
+      const result: ApiResponse<LiveChannel[]> = await response.json();
       if (!result.success) {
         throw new Error(result.error || '获取频道列表失败');
       }
 
-      const channelsData = result.data;
+      const channelsData = result.data || [];
       if (!channelsData || channelsData.length === 0) {
         // 不抛出错误，而是设置空频道列表
         setCurrentChannels([]);
@@ -420,10 +465,10 @@ function LivePageClient() {
 
       setIsVideoLoading(false);
     }
-  };
+  }, [fetchWithRetry, needLoadChannel]);
 
   // 切换直播源
-  const handleSourceChange = async (source: LiveSource) => {
+  const handleSourceChange = useCallback(async (source: LiveSource) => {
     try {
       // 设置切换状态，锁住频道切换器
       setIsSwitchingSource(true);
@@ -448,10 +493,10 @@ function LivePageClient() {
       // 自动切换到频道 tab
       setActiveTab('channels');
     }
-  };
+  }, [fetchChannels]);
 
   // 切换频道
-  const handleChannelChange = async (channel: LiveChannel) => {
+  const handleChannelChange = useCallback(async (channel: LiveChannel) => {
     // 如果正在切换直播源，则禁用频道切换
     if (isSwitchingSource) return;
 
@@ -473,10 +518,10 @@ function LivePageClient() {
     if (channel.tvgId && currentSource) {
       try {
         setIsEpgLoading(true); // 开始加载 EPG 数据
-        const response = await fetch(`/api/live/epg?source=${currentSource.key}&tvgId=${channel.tvgId}`);
+        const response = await fetchWithRetry(`/api/live/epg?source=${currentSource.key}&tvgId=${channel.tvgId}`);
         if (response.ok) {
-          const result = await response.json();
-          if (result.success) {
+          const result: ApiResponse<any> = await response.json();
+          if (result.success && result.data) {
             // 清洗EPG数据，去除重叠的节目
             const cleanedData = {
               ...result.data,
@@ -495,10 +540,10 @@ function LivePageClient() {
       setEpgData(null);
       setIsEpgLoading(false);
     }
-  };
+  }, [isSwitchingSource, currentSource, cleanEpgData, fetchWithRetry]);
 
   // 滚动到指定频道位置的函数
-  const scrollToChannel = (channel: LiveChannel) => {
+  const scrollToChannel = useCallback((channel: LiveChannel) => {
     if (!channelListRef.current) return;
 
     // 使用 data 属性来查找频道元素
@@ -519,10 +564,10 @@ function LivePageClient() {
         behavior: 'smooth'
       });
     }
-  };
+  }, []);
 
   // 模拟点击分组的函数
-  const simulateGroupClick = (group: string, retryCount = 0) => {
+  const simulateGroupClick = useCallback((group: string, retryCount = 0) => {
     if (!groupContainerRef.current) {
       if (retryCount < 10) {
         setTimeout(() => {
@@ -544,10 +589,10 @@ function LivePageClient() {
       // 触发点击事件
       (targetButton as HTMLButtonElement).click();
     }
-  };
+  }, []);
 
   // 清理播放器资源的统一函数
-  const cleanupPlayer = () => {
+  const cleanupPlayer = useCallback(() => {
     // 重置不支持的类型状态
     setUnsupportedType(null);
 
@@ -600,10 +645,10 @@ function LivePageClient() {
         artPlayerRef.current = null;
       }
     }
-  };
+  }, []);
 
   // 确保视频源正确设置
-  const ensureVideoSource = (video: HTMLVideoElement | null, url: string) => {
+  const ensureVideoSource = useCallback((video: HTMLVideoElement | null, url: string) => {
     if (!video || !url) return;
     const sources = Array.from(video.getElementsByTagName('source'));
     const existed = sources.some((s) => s.src === url);
@@ -621,10 +666,10 @@ function LivePageClient() {
     if (video.hasAttribute('disableRemotePlayback')) {
       video.removeAttribute('disableRemotePlayback');
     }
-  };
+  }, []);
 
   // 切换分组
-  const handleGroupChange = (group: string) => {
+  const handleGroupChange = useCallback((group: string) => {
     // 如果正在切换直播源，则禁用分组切换
     if (isSwitchingSource) return;
 
@@ -646,10 +691,10 @@ function LivePageClient() {
         });
       }
     }
-  };
+  }, [isSwitchingSource, currentChannels, currentChannel, scrollToChannel]);
 
   // 切换收藏
-  const handleToggleFavorite = async () => {
+  const handleToggleFavorite = useCallback(async () => {
     if (!currentSourceRef.current || !currentChannelRef.current) return;
 
     try {
@@ -687,12 +732,15 @@ function LivePageClient() {
     } catch (err) {
       console.error('切换收藏失败:', err);
     }
-  };
+  }, []);
+
+  // 使用 useMemo 优化分组计算
+  const groupKeys = useMemo(() => Object.keys(groupedChannels), [groupedChannels]);
 
   // 初始化
   useEffect(() => {
     fetchLiveSources();
-  }, []);
+  }, [fetchLiveSources]);
 
   // 检查收藏状态
   useEffect(() => {
@@ -729,7 +777,6 @@ function LivePageClient() {
   useEffect(() => {
     if (!selectedGroup || !groupContainerRef.current) return;
 
-    const groupKeys = Object.keys(groupedChannels);
     const groupIndex = groupKeys.indexOf(selectedGroup);
     if (groupIndex === -1) return;
 
@@ -755,7 +802,7 @@ function LivePageClient() {
         behavior: 'smooth',
       });
     }
-  }, [selectedGroup, groupedChannels]);
+  }, [selectedGroup, groupKeys]);
 
   class CustomHlsJsLoader extends Hls.DefaultConfig.loader {
     constructor(config: any) {
@@ -796,7 +843,7 @@ function LivePageClient() {
     }
   }
 
-  function m3u8Loader(video: HTMLVideoElement, url: string) {
+  const m3u8Loader = useCallback((video: HTMLVideoElement, url: string) => {
     if (!Hls) {
       console.error('HLS.js 未加载');
       return;
@@ -843,7 +890,7 @@ function LivePageClient() {
         }
       }
     });
-  }
+  }, []);
 
   // 播放器初始化
   useEffect(() => {
@@ -868,14 +915,17 @@ function LivePageClient() {
       // precheck type
       let type = 'm3u8';
       const precheckUrl = `/api/live/precheck?url=${encodeURIComponent(videoUrl)}&decotv-source=${currentSourceRef.current?.key || ''}`;
-      const precheckResponse = await fetch(precheckUrl);
-      if (!precheckResponse.ok) {
-        console.error('预检查失败:', precheckResponse.statusText);
+      try {
+        const precheckResponse = await fetchWithRetry(precheckUrl);
+        if (precheckResponse.ok) {
+          const precheckResult: ApiResponse<{ type: string }> = await precheckResponse.json();
+          if (precheckResult.success && precheckResult.data) {
+            type = precheckResult.data.type;
+          }
+        }
+      } catch (error) {
+        console.error('预检查失败:', error);
         return;
-      }
-      const precheckResult = await precheckResponse.json();
-      if (precheckResult.success) {
-        type = precheckResult.type;
       }
 
       // 如果不是 m3u8 类型，设置不支持的类型并返回
@@ -941,7 +991,6 @@ function LivePageClient() {
         artPlayerRef.current.on('ready', () => {
           setError(null);
           setIsVideoLoading(false);
-
         });
 
         artPlayerRef.current.on('loadstart', () => {
@@ -977,19 +1026,26 @@ function LivePageClient() {
       }
     }
     preload();
-  }, [Artplayer, Hls, videoUrl, currentChannel, loading]);
+  }, [Artplayer, Hls, videoUrl, currentChannel, loading, m3u8Loader, cleanupPlayer, ensureVideoSource, fetchWithRetry]);
 
   // 清理播放器资源
   useEffect(() => {
     return () => {
       cleanupPlayer();
+      // 取消所有未完成的请求
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
-  }, []);
+  }, [cleanupPlayer]);
 
   // 页面卸载时的额外清理
   useEffect(() => {
     const handleBeforeUnload = () => {
       cleanupPlayer();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -997,8 +1053,11 @@ function LivePageClient() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       cleanupPlayer();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
-  }, []);
+  }, [cleanupPlayer]);
 
   // 全局快捷键处理
   useEffect(() => {
@@ -1371,7 +1430,7 @@ function LivePageClient() {
                         }}
                       >
                         <div className='flex gap-4 min-w-max'>
-                          {Object.keys(groupedChannels).map((group, index) => (
+                          {groupKeys.map((group, index) => (
                             <button
                               key={group}
                               data-group={group}
