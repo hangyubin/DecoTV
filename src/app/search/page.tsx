@@ -223,7 +223,7 @@ const searchReducer = (state: SearchState, action: SearchAction): SearchState =>
     case 'SEARCH_SOURCE_COMPLETE':
       return {
         ...state,
-        completedSources: state.completedSources + 1,
+        completedSources: Math.min(state.completedSources + 1, state.totalSources || 1),
       };
     case 'SEARCH_SUCCESS':
       return {
@@ -768,7 +768,7 @@ function SearchPageClient() {
         </h3>
         {useFluidSearch && searchState.totalSources > 0 && (
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            已搜索 {Math.min(searchState.completedSources, searchState.totalSources)}/{searchState.totalSources} 个来源
+            已搜索 {searchState.completedSources}/{searchState.totalSources} 个来源
           </div>
         )}
         <div className="mt-4 text-sm text-gray-500 dark:text-gray-400 max-w-md">
@@ -882,7 +882,7 @@ function SearchPageClient() {
     );
   };
 
-  // 渲染搜索结果内容 - 移除虚拟滚动，使用原来的网格布局
+  // 渲染搜索结果内容
   const renderSearchResults = () => {
     if (searchState.error) {
       return renderErrorState();
@@ -1063,7 +1063,6 @@ function SearchPageClient() {
                 });
                 break;
               case 'source_result':
-                // 修复：只有当有结果时才增加计数
                 if (payload.results?.length) {
                   pendingResultsRef.current.push(...payload.results);
                   if (!flushTimerRef.current) {
@@ -1073,16 +1072,13 @@ function SearchPageClient() {
                     }, SEARCH_CONFIG.RESULTS_FLUSH_DELAY);
                   }
                 }
-                // 无论是否有结果，都增加完成计数
                 dispatch({ type: 'SEARCH_SOURCE_COMPLETE' });
                 break;
               case 'source_error':
-                // 错误情况下也增加完成计数
                 dispatch({ type: 'SEARCH_SOURCE_COMPLETE' });
                 handleSearchError(`搜索源 ${payload.source} 出错`);
                 break;
               case 'complete':
-                // 修复：完成事件设置搜索完成状态
                 flushPendingResults();
                 if (isActive) {
                   dispatch({ type: 'SEARCH_COMPLETE' });
@@ -1180,7 +1176,7 @@ function SearchPageClient() {
                   {searchState.status === 'loading' ? '搜索中...' : '搜索结果'}
                   {searchState.totalSources > 0 && useFluidSearch && (
                     <span className='ml-2 text-sm font-normal text-gray-500 dark:text-gray-400'>
-                      {Math.min(searchState.completedSources, searchState.totalSources)}/{searchState.totalSources}
+                      {searchState.completedSources}/{searchState.totalSources}
                     </span>
                   )}
                 </h2>
