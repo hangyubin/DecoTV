@@ -100,76 +100,6 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-// 虚拟滚动组件
-interface VirtualScrollProps {
-  items: any[];
-  itemHeight: number;
-  containerHeight: number;
-  renderItem: (item: any, index: number) => React.ReactNode;
-  overscan?: number;
-}
-
-const VirtualScroll: React.FC<VirtualScrollProps> = ({
-  items,
-  itemHeight,
-  containerHeight,
-  renderItem,
-  overscan = 5,
-}) => {
-  const [scrollTop, setScrollTop] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const totalHeight = items.length * itemHeight;
-  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
-  const endIndex = Math.min(
-    items.length - 1,
-    Math.floor((scrollTop + containerHeight) / itemHeight) + overscan
-  );
-
-  const visibleItems = items.slice(startIndex, endIndex + 1);
-
-  const handleScroll = useCallback(() => {
-    if (containerRef.current) {
-      setScrollTop(containerRef.current.scrollTop);
-    }
-  }, []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (container) {
-      container.addEventListener('scroll', handleScroll, { passive: true });
-      return () => container.removeEventListener('scroll', handleScroll);
-    }
-  }, [handleScroll]);
-
-  return (
-    <div
-      ref={containerRef}
-      style={{ height: containerHeight, overflow: 'auto' }}
-      className="virtual-scroll-container"
-    >
-      <div style={{ height: totalHeight, position: 'relative' }}>
-        {visibleItems.map((item, index) => {
-          const actualIndex = startIndex + index;
-          return (
-            <div
-              key={actualIndex}
-              style={{
-                position: 'absolute',
-                top: actualIndex * itemHeight,
-                height: itemHeight,
-                width: '100%',
-              }}
-            >
-              {renderItem(item, actualIndex)}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
 // 计算管理器
 class SearchComputeManager {
   private similarityCache = new Map<string, number>();
@@ -271,7 +201,7 @@ type SearchAction =
   | { type: 'SEARCH_SUCCESS'; payload: SearchResult[] }
   | { type: 'SEARCH_ERROR'; payload: string }
   | { type: 'SEARCH_RESET' }
-  | { type: 'SEARCH_COMPLETE' }; // 新增完成状态
+  | { type: 'SEARCH_COMPLETE' };
 
 const searchReducer = (state: SearchState, action: SearchAction): SearchState => {
   switch (action.type) {
@@ -302,7 +232,7 @@ const searchReducer = (state: SearchState, action: SearchAction): SearchState =>
         results: action.payload,
         completedSources: state.totalSources || 1,
       };
-    case 'SEARCH_COMPLETE': // 新增
+    case 'SEARCH_COMPLETE':
       return {
         ...state,
         status: 'success',
@@ -952,88 +882,7 @@ function SearchPageClient() {
     );
   };
 
-  // 使用虚拟滚动渲染搜索结果（优化大量数据场景）
-  const renderSearchResultsWithVirtualScroll = () => {
-    const results = viewMode === 'agg' ? filteredAggResults : filteredAllResults;
-    
-    if (results.length > 50) {
-      return (
-        <VirtualScroll
-          items={results}
-          itemHeight={320}
-          containerHeight={600}
-          overscan={5}
-          renderItem={(item, index) => (
-            <div className="pb-4">
-              {viewMode === 'agg' ? renderAggregatedItem(item as [string, SearchResult[]], index) : renderSingleItem(item as SearchResult, index)}
-            </div>
-          )}
-        />
-      );
-    }
-
-    return (
-      <div
-        key={`search-results-${viewMode}`}
-        className="justify-start grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8"
-      >
-        {viewMode === 'agg' 
-          ? filteredAggResults.map(renderAggregatedItem)
-          : filteredAllResults.map(renderSingleItem)
-        }
-      </div>
-    );
-  };
-
-  const renderAggregatedItem = ([mapKey, group]: [string, SearchResult[]], index: number) => {
-    const title = group[0]?.title || '';
-    const poster = group[0]?.poster || '';
-    const year = group[0]?.year || 'unknown';
-    const { episodes, source_names, douban_id } = computeGroupStats(group);
-    const type = episodes === 1 ? 'movie' : 'tv';
-
-    if (!groupStatsRef.current.has(mapKey)) {
-      groupStatsRef.current.set(mapKey, { episodes, source_names, douban_id });
-    }
-
-    return (
-      <div key={`agg-${mapKey}-${index}`} className='w-full'>
-        <VideoCard
-          ref={getGroupRef(mapKey)}
-          from='search'
-          isAggregate={true}
-          title={title}
-          poster={poster}
-          year={year}
-          episodes={episodes}
-          source_names={source_names}
-          douban_id={douban_id}
-          query={searchQuery.trim() !== title ? searchQuery.trim() : ''}
-          type={type}
-        />
-      </div>
-    );
-  };
-
-  const renderSingleItem = (item: SearchResult, index: number) => (
-    <div key={`all-${item.source}-${item.id}-${index}`} className='w-full'>
-      <VideoCard
-        id={item.id}
-        title={item.title}
-        poster={item.poster}
-        episodes={item.episodes.length}
-        source={item.source}
-        source_name={item.source_name}
-        douban_id={item.douban_id}
-        query={searchQuery.trim() !== item.title ? searchQuery.trim() : ''}
-        year={item.year}
-        from='search'
-        type={item.episodes.length > 1 ? 'tv' : 'movie'}
-      />
-    </div>
-  );
-
-  // 渲染搜索结果内容
+  // 渲染搜索结果内容 - 移除虚拟滚动，使用原来的网格布局
   const renderSearchResults = () => {
     if (searchState.error) {
       return renderErrorState();
@@ -1048,7 +897,63 @@ function SearchPageClient() {
     }
 
     if (searchState.results.length > 0) {
-      return renderSearchResultsWithVirtualScroll();
+      return (
+        <div
+          key={`search-results-${viewMode}`}
+          className="justify-start grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6 px-2"
+        >
+          {viewMode === 'agg' 
+            ? filteredAggResults.map(([mapKey, group], index) => {
+                const title = group[0]?.title || '';
+                const poster = group[0]?.poster || '';
+                const year = group[0]?.year || 'unknown';
+                const { episodes, source_names, douban_id } = computeGroupStats(group);
+                const type = episodes === 1 ? 'movie' : 'tv';
+
+                if (!groupStatsRef.current.has(mapKey)) {
+                  groupStatsRef.current.set(mapKey, { episodes, source_names, douban_id });
+                }
+
+                return (
+                  <div key={`agg-${mapKey}-${index}`} className='w-full'>
+                    <VideoCard
+                      ref={getGroupRef(mapKey)}
+                      from='search'
+                      isAggregate={true}
+                      title={title}
+                      poster={poster}
+                      year={year}
+                      episodes={episodes}
+                      source_names={source_names}
+                      douban_id={douban_id}
+                      query={searchQuery.trim() !== title ? searchQuery.trim() : ''}
+                      type={type}
+                    />
+                  </div>
+                );
+              })
+            : filteredAllResults.map((item, index) => (
+                <div
+                  key={`all-${item.source}-${item.id}-${index}`}
+                  className='w-full'
+                >
+                  <VideoCard
+                    id={item.id}
+                    title={item.title}
+                    poster={item.poster}
+                    episodes={item.episodes.length}
+                    source={item.source}
+                    source_name={item.source_name}
+                    douban_id={item.douban_id}
+                    query={searchQuery.trim() !== item.title ? searchQuery.trim() : ''}
+                    year={item.year}
+                    from='search'
+                    type={item.episodes.length > 1 ? 'tv' : 'movie'}
+                  />
+                </div>
+              ))}
+        </div>
+      );
     }
 
     return null;
