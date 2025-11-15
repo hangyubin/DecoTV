@@ -38,7 +38,7 @@ const SEARCH_CONFIG = {
   DEBOUNCE_DELAY: 300,
 } as const;
 
-// 错误边界组件（优化点1）
+// 错误边界组件
 class SearchErrorBoundary extends React.Component<
   { children: React.ReactNode; fallback?: React.ReactNode },
   { hasError: boolean; error?: Error }
@@ -54,10 +54,6 @@ class SearchErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('Search Page Error:', error, errorInfo);
-    // 这里可以集成错误上报服务
-    if (typeof window !== 'undefined' && (window as any).trackJs) {
-      (window as any).trackJs.track(error);
-    }
   }
 
   render() {
@@ -104,7 +100,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-// 虚拟滚动组件（优化点2）
+// 虚拟滚动组件
 interface VirtualScrollProps {
   items: any[];
   itemHeight: number;
@@ -174,7 +170,7 @@ const VirtualScroll: React.FC<VirtualScrollProps> = ({
   );
 };
 
-// 简化的 Web Worker 替代方案 - 使用主线程计算（优化点3）
+// 计算管理器
 class SearchComputeManager {
   private similarityCache = new Map<string, number>();
 
@@ -207,7 +203,6 @@ class SearchComputeManager {
 
     const similarity = matches / shorter.length;
     
-    // 简单的缓存清理
     if (this.similarityCache.size > SEARCH_CONFIG.MAX_CACHE_SIZE) {
       const firstKey = this.similarityCache.keys().next().value;
       this.similarityCache.delete(firstKey);
@@ -225,18 +220,12 @@ class SearchComputeManager {
     const relevantResults = results.filter((item) => {
       const title = item.title.toLowerCase();
       
-      // 快速路径：精确匹配
       if (title === normalizedQuery) return true;
-      
-      // 快速路径：包含匹配
       if (title.includes(normalizedQuery)) return true;
-      
-      // 对于短查询，使用简化匹配
       if (normalizedQuery.length <= 2) {
         return title.replace(/\s+/g, '').includes(normalizedQuery.replace(/\s+/g, ''));
       }
 
-      // 只在必要时使用相似度计算
       return this.calculateSimilarity(title, normalizedQuery) > SEARCH_CONFIG.SIMILARITY_THRESHOLD;
     });
 
@@ -265,7 +254,7 @@ class SearchComputeManager {
   }
 }
 
-// 增强的 TypeScript 类型定义（优化点4）
+// 增强的 TypeScript 类型定义
 interface SearchState {
   query: string;
   status: 'idle' | 'loading' | 'success' | 'error';
@@ -281,7 +270,8 @@ type SearchAction =
   | { type: 'SEARCH_SOURCE_COMPLETE' }
   | { type: 'SEARCH_SUCCESS'; payload: SearchResult[] }
   | { type: 'SEARCH_ERROR'; payload: string }
-  | { type: 'SEARCH_RESET' };
+  | { type: 'SEARCH_RESET' }
+  | { type: 'SEARCH_COMPLETE' }; // 新增完成状态
 
 const searchReducer = (state: SearchState, action: SearchAction): SearchState => {
   switch (action.type) {
@@ -293,7 +283,7 @@ const searchReducer = (state: SearchState, action: SearchAction): SearchState =>
         error: null,
         totalSources: action.payload.totalSources || 0,
         completedSources: 0,
-        results: [], // 重置结果
+        results: [],
       };
     case 'SEARCH_RESULT':
       return {
@@ -311,6 +301,12 @@ const searchReducer = (state: SearchState, action: SearchAction): SearchState =>
         status: 'success',
         results: action.payload,
         completedSources: state.totalSources || 1,
+      };
+    case 'SEARCH_COMPLETE': // 新增
+      return {
+        ...state,
+        status: 'success',
+        completedSources: state.totalSources,
       };
     case 'SEARCH_ERROR':
       return {
@@ -332,7 +328,7 @@ const searchReducer = (state: SearchState, action: SearchAction): SearchState =>
   }
 };
 
-// 可访问性改进的组件（优化点5）
+// 可访问性改进的组件
 const AccessibleSearchInput: React.FC<{
   value: string;
   onChange: (value: string) => void;
@@ -842,7 +838,7 @@ function SearchPageClient() {
         </h3>
         {useFluidSearch && searchState.totalSources > 0 && (
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            已搜索 {searchState.completedSources}/{searchState.totalSources} 个来源
+            已搜索 {Math.min(searchState.completedSources, searchState.totalSources)}/{searchState.totalSources} 个来源
           </div>
         )}
         <div className="mt-4 text-sm text-gray-500 dark:text-gray-400 max-w-md">
@@ -960,11 +956,11 @@ function SearchPageClient() {
   const renderSearchResultsWithVirtualScroll = () => {
     const results = viewMode === 'agg' ? filteredAggResults : filteredAllResults;
     
-    if (results.length > 50) { // 只在结果较多时使用虚拟滚动
+    if (results.length > 50) {
       return (
         <VirtualScroll
           items={results}
-          itemHeight={320} // 根据实际卡片高度调整
+          itemHeight={320}
           containerHeight={600}
           overscan={5}
           renderItem={(item, index) => (
@@ -976,7 +972,6 @@ function SearchPageClient() {
       );
     }
 
-    // 结果较少时使用普通渲染
     return (
       <div
         key={`search-results-${viewMode}`}
@@ -1063,15 +1058,12 @@ function SearchPageClient() {
   useEffect(() => {
     isMountedRef.current = true;
 
-    // 无搜索参数时聚焦搜索框
     !searchParams.get('q') && document.getElementById('searchInput')?.focus();
 
-    // 初始加载搜索历史
     getSearchHistory().then((history) => {
       if (isMountedRef.current) setSearchHistory(history);
     });
 
-    // 读取流式搜索设置
     if (typeof window !== 'undefined') {
       const savedFluidSearch = localStorage.getItem('fluidSearch');
       const defaultFluidSearch =
@@ -1083,7 +1075,6 @@ function SearchPageClient() {
       }
     }
 
-    // 监听搜索历史更新事件
     const unsubscribe = subscribeToDataUpdates(
       'searchHistoryUpdated',
       (newHistory: string[]) => {
@@ -1091,7 +1082,6 @@ function SearchPageClient() {
       }
     );
 
-    // 监听滚动事件
     document.body.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
@@ -1102,7 +1092,7 @@ function SearchPageClient() {
     };
   }, [searchParams, handleScroll, cleanupResources]);
 
-  // 搜索参数变化处理 - 优化资源管理
+  // 搜索参数变化处理 - 修复计数逻辑和完成状态
   useEffect(() => {
     let isActive = true;
 
@@ -1114,18 +1104,14 @@ function SearchPageClient() {
       setSearchQuery(query);
       setHasSearched(true);
       
-      // 只有在查询变化时才重置结果
       if (currentQueryRef.current !== trimmedQuery) {
         dispatch({ type: 'SEARCH_RESET' });
         pendingResultsRef.current = [];
       }
       
       setShowResults(true);
-
-      // 清理旧连接
       cleanupResources();
 
-      // 读取最新设置
       let currentFluidSearch = useFluidSearch;
       if (typeof window !== 'undefined') {
         const savedFluidSearch = localStorage.getItem('fluidSearch');
@@ -1149,7 +1135,7 @@ function SearchPageClient() {
       };
 
       if (currentFluidSearch) {
-        // 流式搜索
+        // 流式搜索 - 修复计数逻辑
         const es = new EventSource(
           `/api/search/ws?q=${encodeURIComponent(trimmedQuery)}`
         );
@@ -1172,7 +1158,7 @@ function SearchPageClient() {
                 });
                 break;
               case 'source_result':
-                dispatch({ type: 'SEARCH_SOURCE_COMPLETE' });
+                // 修复：只有当有结果时才增加计数
                 if (payload.results?.length) {
                   pendingResultsRef.current.push(...payload.results);
                   if (!flushTimerRef.current) {
@@ -1182,14 +1168,20 @@ function SearchPageClient() {
                     }, SEARCH_CONFIG.RESULTS_FLUSH_DELAY);
                   }
                 }
+                // 无论是否有结果，都增加完成计数
+                dispatch({ type: 'SEARCH_SOURCE_COMPLETE' });
                 break;
               case 'source_error':
+                // 错误情况下也增加完成计数
                 dispatch({ type: 'SEARCH_SOURCE_COMPLETE' });
                 handleSearchError(`搜索源 ${payload.source} 出错`);
                 break;
               case 'complete':
-                dispatch({ type: 'SEARCH_SOURCE_COMPLETE' });
+                // 修复：完成事件设置搜索完成状态
                 flushPendingResults();
+                if (isActive) {
+                  dispatch({ type: 'SEARCH_COMPLETE' });
+                }
                 es.close();
                 if (eventSourceRef.current === es) {
                   eventSourceRef.current = null;
@@ -1238,7 +1230,6 @@ function SearchPageClient() {
       setShowSuggestions(false);
       addSearchHistory(query);
     } else {
-      // 没有查询参数时，重置状态
       setShowResults(false);
       setShowSuggestions(false);
       setHasSearched(false);
@@ -1253,7 +1244,6 @@ function SearchPageClient() {
   return (
     <PageLayout activePath='/search'>
       <div className='px-4 sm:px-10 py-4 sm:py-8 overflow-visible mb-10'>
-        {/* 搜索框 */}
         <div className='mb-8'>
           <AccessibleSearchInput
             value={searchQuery}
@@ -1268,7 +1258,6 @@ function SearchPageClient() {
             isLoading={searchState.status === 'loading'}
           />
 
-          {/* 搜索建议 */}
           <SearchSuggestions
             query={debouncedSearchQuery}
             isVisible={showSuggestions}
@@ -1278,17 +1267,15 @@ function SearchPageClient() {
           />
         </div>
 
-        {/* 搜索结果或搜索历史 */}
         <div className='max-w-[95%] mx-auto mt-12 overflow-visible'>
           {showResults ? (
             <section className='mb-12' aria-live="polite" aria-atomic="true">
-              {/* 标题和搜索信息 */}
               <div className='mb-6'>
                 <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
                   {searchState.status === 'loading' ? '搜索中...' : '搜索结果'}
                   {searchState.totalSources > 0 && useFluidSearch && (
                     <span className='ml-2 text-sm font-normal text-gray-500 dark:text-gray-400'>
-                      {searchState.completedSources}/{searchState.totalSources}
+                      {Math.min(searchState.completedSources, searchState.totalSources)}/{searchState.totalSources}
                     </span>
                   )}
                 </h2>
@@ -1302,7 +1289,6 @@ function SearchPageClient() {
                 )}
               </div>
               
-              {/* 只有当有结果时才显示筛选器 */}
               {searchState.results.length > 0 && (
                 <div className='mb-8 flex items-center justify-between gap-3'>
                   <div className='flex-1 min-w-0'>
@@ -1321,7 +1307,6 @@ function SearchPageClient() {
                     )}
                   </div>
                   
-                  {/* 聚合开关 */}
                   <label className='flex items-center gap-2 cursor-pointer select-none shrink-0'>
                     <span className='text-xs sm:text-sm text-gray-700 dark:text-gray-300'>
                       聚合
@@ -1343,11 +1328,9 @@ function SearchPageClient() {
                 </div>
               )}
 
-              {/* 搜索结果内容 */}
               {renderSearchResults()}
             </section>
           ) : searchHistory.length > 0 ? (
-            // 搜索历史
             <section className='mb-12'>
               <h2 className='mb-4 text-xl font-bold text-gray-800 text-left dark:text-gray-200'>
                 搜索历史
@@ -1378,7 +1361,6 @@ function SearchPageClient() {
                     >
                       {item}
                     </button>
-                    {/* 删除按钮 */}
                     <button
                       aria-label={`删除搜索历史 ${item}`}
                       onClick={(e) => {
@@ -1398,7 +1380,6 @@ function SearchPageClient() {
         </div>
       </div>
 
-      {/* 返回顶部悬浮按钮 */}
       <button
         onClick={scrollToTop}
         className={`fixed bottom-20 md:bottom-6 right-6 z-[500] w-12 h-12 bg-green-500/90 hover:bg-green-500 text-white rounded-full shadow-lg backdrop-blur-sm transition-all duration-300 ease-in-out flex items-center justify-center group ${
@@ -1414,7 +1395,6 @@ function SearchPageClient() {
   );
 }
 
-// 包装组件以提供错误边界
 function SearchPageWithErrorBoundary() {
   return (
     <SearchErrorBoundary>
