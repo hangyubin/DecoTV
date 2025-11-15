@@ -35,9 +35,27 @@ const SEARCH_CONFIG = {
   SCROLL_THRESHOLD: 300,
   SIMILARITY_THRESHOLD: 0.7,
   MAX_CACHE_SIZE: 50,
+  DEBOUNCE_DELAY: 300,
 } as const;
 
-// 相似度计算函数 - 添加缓存优化
+// 防抖 Hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+// 相似度计算函数 - 添加缓存优化和性能监控
 const calculateSimilarity = (() => {
   const cache = new Map<string, number>();
   
@@ -49,6 +67,12 @@ const calculateSimilarity = (() => {
       return cache.get(cacheKey)!;
     }
     
+    // 简单快速匹配检查
+    if (str1 === str2) {
+      cache.set(cacheKey, 1.0);
+      return 1.0;
+    }
+    
     const longer = str1.length > str2.length ? str1 : str2;
     const shorter = str1.length > str2.length ? str2 : str1;
     
@@ -57,6 +81,7 @@ const calculateSimilarity = (() => {
       return 1.0;
     }
     
+    // 优化算法：使用更简单的匹配逻辑
     let matches = 0;
     let shorterIndex = 0;
     
@@ -81,30 +106,34 @@ const calculateSimilarity = (() => {
 })();
 
 function SearchPageClient() {
-  // 搜索历史
+  // 搜索状态
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
-  // 返回顶部按钮显示状态
   const [showBackToTop, setShowBackToTop] = useState(false);
-
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const currentQueryRef = useRef<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
   const [totalSources, setTotalSources] = useState(0);
   const [completedSources, setCompletedSources] = useState(0);
+  const [useFluidSearch, setUseFluidSearch] = useState(true);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // 使用防抖的搜索查询
+  const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_CONFIG.DEBOUNCE_DELAY);
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentQueryRef = useRef<string>('');
+  
+  // Refs
+  const eventSourceRef = useRef<EventSource | null>(null);
   const pendingResultsRef = useRef<SearchResult[]>([]);
   const flushTimerRef = useRef<number | null>(null);
-  const [useFluidSearch, setUseFluidSearch] = useState(true);
-  
-  // 添加搜索状态追踪
-  const [hasSearched, setHasSearched] = useState(false);
-  
-  // 过滤器状态 - 移到前面声明
+  const isMountedRef = useRef(true);
+
+  // 过滤器状态
   const [filterAll, setFilterAll] = useState({
     source: 'all',
     title: 'all',
@@ -150,6 +179,21 @@ function SearchPageClient() {
     key: string;
     results: [string, SearchResult[]][];
   }>({ key: '', results: [] });
+
+  // 统一的资源清理函数
+  const cleanupResources = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    
+    pendingResultsRef.current = [];
+  }, []);
 
   // 使用 useCallback 优化函数
   const getGroupRef = useCallback((key: string) => {
@@ -204,7 +248,26 @@ function SearchPageClient() {
     return { episodes, source_names, douban_id };
   }, []);
 
-  // 使用 useCallback 优化事件处理函数
+  // 统一搜索执行函数
+  const executeSearch = useCallback((query: string) => {
+    if (!query.trim()) return;
+
+    const trimmed = query.trim().replace(/\s+/g, ' ');
+    
+    // 重置状态
+    setIsLoading(true);
+    setShowResults(true);
+    setShowSuggestions(false);
+    setHasSearched(true);
+    setSearchError(null);
+
+    // 清理之前的资源
+    cleanupResources();
+
+    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  }, [router, cleanupResources]);
+
+  // 优化事件处理函数
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -224,39 +287,18 @@ function SearchPageClient() {
 
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = searchQuery.trim().replace(/\s+/g, ' ');
-    if (!trimmed) return;
-
-    setSearchQuery(trimmed);
-    setIsLoading(true);
-    setShowResults(true);
-    setShowSuggestions(false);
-    setHasSearched(true);
-
-    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
-  }, [searchQuery, router]);
+    executeSearch(searchQuery);
+  }, [searchQuery, executeSearch]);
 
   const handleEnterKey = useCallback(() => {
-    const trimmed = searchQuery.trim().replace(/\s+/g, ' ');
-    if (!trimmed) return;
-
-    setSearchQuery(trimmed);
-    setIsLoading(true);
-    setShowResults(true);
-    setShowSuggestions(false);
-    setHasSearched(true);
-
-    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
-  }, [searchQuery, router]);
+    executeSearch(searchQuery);
+  }, [searchQuery, executeSearch]);
 
   const handleSuggestionSelect = useCallback((suggestion: string) => {
     setSearchQuery(suggestion);
     setShowSuggestions(false);
-    setIsLoading(true);
-    setShowResults(true);
-    setHasSearched(true);
-    router.push(`/search?q=${encodeURIComponent(suggestion)}`);
-  }, [router]);
+    executeSearch(suggestion);
+  }, [executeSearch]);
 
   // 优化滚动处理函数
   const handleScroll = useCallback(() => {
@@ -278,7 +320,7 @@ function SearchPageClient() {
 
   // 优化结果刷新逻辑
   const flushPendingResults = useCallback(() => {
-    if (pendingResultsRef.current.length > 0) {
+    if (pendingResultsRef.current.length > 0 && isMountedRef.current) {
       const toAppend = pendingResultsRef.current;
       pendingResultsRef.current = [];
       startTransition(() => {
@@ -308,7 +350,7 @@ function SearchPageClient() {
     return order === 'asc' ? aNum - bNum : bNum - aNum;
   }, []);
 
-  // 改进的聚合结果计算 - 添加缓存优化
+  // 改进的聚合结果计算 - 优化性能
   const aggregatedResults = useMemo(() => {
     const query = currentQueryRef.current.trim().toLowerCase();
     
@@ -324,31 +366,23 @@ function SearchPageClient() {
       return aggregationCacheRef.current.results;
     }
 
+    // 优化：使用更高效的过滤策略
     const relevantResults = searchResults.filter((item) => {
       const title = item.title.toLowerCase();
       
+      // 快速路径：精确匹配
+      if (title === query) return true;
+      
+      // 快速路径：包含匹配
+      if (title.includes(query)) return true;
+      
+      // 对于短查询，使用简化匹配
       if (query.length <= 2) {
-        return (
-          title.includes(query) ||
-          title.replace(/\s+/g, '').includes(query.replace(/\s+/g, ''))
-        );
+        return title.replace(/\s+/g, '').includes(query.replace(/\s+/g, ''));
       }
 
-      const matchStrategies = [
-        title === query,
-        title.includes(query),
-        title.replace(/[^\w\u4e00-\u9fa5]/g, '').includes(query.replace(/[^\w\u4e00-\u9fa5]/g, '')),
-        title.startsWith(query),
-        title.endsWith(query),
-        ...(query.length > 1 ? [
-          query.split('').every(char => title.includes(char)),
-        ] : []),
-        ...(query.length > 2 ? [
-          calculateSimilarity(title, query) > SEARCH_CONFIG.SIMILARITY_THRESHOLD,
-        ] : []),
-      ];
-
-      return matchStrategies.some(match => match);
+      // 只在必要时使用相似度计算
+      return calculateSimilarity(title, query) > SEARCH_CONFIG.SIMILARITY_THRESHOLD;
     });
 
     const map = new Map<string, SearchResult[]>();
@@ -407,8 +441,12 @@ function SearchPageClient() {
     });
   }, [aggregatedResults, computeGroupStats]);
 
-  // 构建筛选选项 - 添加缓存优化
+  // 构建筛选选项 - 优化缓存策略
   const filterOptions = useMemo(() => {
+    if (searchResults.length === 0) {
+      return { categoriesAll: [], categoriesAgg: [] };
+    }
+
     const cacheKey = searchResults.map(r => `${r.source}-${r.title}-${r.year}`).join('|');
     const cached = sessionStorage.getItem(`filterOptions-${cacheKey}`);
     
@@ -467,10 +505,8 @@ function SearchPageClient() {
 
     const result = { categoriesAll, categoriesAgg };
     
-    // 缓存结果
-    if (searchResults.length > 0) {
-      sessionStorage.setItem(`filterOptions-${cacheKey}`, JSON.stringify(result));
-    }
+    // 只在有结果时缓存
+    sessionStorage.setItem(`filterOptions-${cacheKey}`, JSON.stringify(result));
     
     return result;
   }, [searchResults]);
@@ -564,7 +600,34 @@ function SearchPageClient() {
     </div>
   );
 
-  // 渲染空状态组件 - 大幅优化
+  // 渲染错误状态组件
+  const renderErrorState = () => (
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <div className="mb-6 relative">
+        <div className="w-20 h-20 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center">
+          <X className="h-10 w-10 text-red-500 dark:text-red-400" />
+        </div>
+      </div>
+      
+      <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3">
+        搜索失败
+      </h3>
+      
+      <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md">
+        {searchError || "搜索过程中出现错误，请重试"}
+      </p>
+
+      <button
+        onClick={() => executeSearch(currentQueryRef.current)}
+        className="px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors duration-200 flex items-center gap-2"
+      >
+        <RotateCw className="h-4 w-4" />
+        重新搜索
+      </button>
+    </div>
+  );
+
+  // 渲染空状态组件
   const renderEmptyState = () => {
     const query = currentQueryRef.current;
     
@@ -624,7 +687,6 @@ function SearchPageClient() {
           
           <button
             onClick={() => {
-              // 清空搜索状态，回到初始状态
               setSearchResults([]);
               setShowResults(false);
               setHasSearched(false);
@@ -641,6 +703,10 @@ function SearchPageClient() {
 
   // 渲染搜索结果内容
   const renderSearchResults = () => {
+    if (searchError) {
+      return renderErrorState();
+    }
+
     if (isLoading) {
       return renderLoadingState();
     }
@@ -727,14 +793,14 @@ function SearchPageClient() {
 
   // 主 useEffect - 优化资源管理
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
 
     // 无搜索参数时聚焦搜索框
     !searchParams.get('q') && document.getElementById('searchInput')?.focus();
 
     // 初始加载搜索历史
     getSearchHistory().then((history) => {
-      if (isMounted) setSearchHistory(history);
+      if (isMountedRef.current) setSearchHistory(history);
     });
 
     // 读取流式搜索设置
@@ -753,7 +819,7 @@ function SearchPageClient() {
     const unsubscribe = subscribeToDataUpdates(
       'searchHistoryUpdated',
       (newHistory: string[]) => {
-        if (isMounted) setSearchHistory(newHistory);
+        if (isMountedRef.current) setSearchHistory(newHistory);
       }
     );
 
@@ -761,22 +827,14 @@ function SearchPageClient() {
     document.body.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
       unsubscribe();
       document.body.removeEventListener('scroll', handleScroll);
-      
-      // 清理所有资源
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-      }
-      pendingResultsRef.current = [];
+      cleanupResources();
     };
-  }, [searchParams, handleScroll]);
+  }, [searchParams, handleScroll, cleanupResources]);
 
-  // 搜索参数变化处理 - 优化资源管理，解决闪烁问题
+  // 搜索参数变化处理 - 优化资源管理
   useEffect(() => {
     let isActive = true;
 
@@ -787,8 +845,9 @@ function SearchPageClient() {
     if (query) {
       setSearchQuery(query);
       setHasSearched(true);
+      setSearchError(null);
       
-      // 只有在查询变化时才重置结果，避免重复搜索时的闪烁
+      // 只有在查询变化时才重置结果
       if (currentQueryRef.current !== trimmedQuery) {
         setSearchResults([]);
         setTotalSources(0);
@@ -800,15 +859,7 @@ function SearchPageClient() {
       setShowResults(true);
 
       // 清理旧连接
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
+      cleanupResources();
 
       // 读取最新设置
       let currentFluidSearch = useFluidSearch;
@@ -826,6 +877,13 @@ function SearchPageClient() {
       if (currentFluidSearch !== useFluidSearch) {
         setUseFluidSearch(currentFluidSearch);
       }
+
+      const handleSearchError = (error: string) => {
+        if (isActive) {
+          setSearchError(error);
+          setIsLoading(false);
+        }
+      };
 
       if (currentFluidSearch) {
         // 流式搜索
@@ -859,6 +917,7 @@ function SearchPageClient() {
                 break;
               case 'source_error':
                 setCompletedSources((prev) => prev + 1);
+                handleSearchError(`搜索源 ${payload.source} 出错`);
                 break;
               case 'complete':
                 setCompletedSources(payload.completedSources || totalSources);
@@ -872,23 +931,26 @@ function SearchPageClient() {
             }
           } catch (error) {
             console.error('Parse search event error:', error);
+            handleSearchError('解析搜索结果时出错');
           }
         };
 
         es.onerror = () => {
-          if (isActive) {
-            setIsLoading(false);
-            flushPendingResults();
-            es.close();
-            if (eventSourceRef.current === es) {
-              eventSourceRef.current = null;
-            }
+          handleSearchError('搜索连接出错');
+          es.close();
+          if (eventSourceRef.current === es) {
+            eventSourceRef.current = null;
           }
         };
       } else {
         // 传统搜索
         fetch(`/api/search?q=${encodeURIComponent(trimmedQuery)}`)
-          .then((response) => response.json())
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+          })
           .then((data) => {
             if (!isActive || currentQueryRef.current !== trimmedQuery) return;
 
@@ -899,8 +961,10 @@ function SearchPageClient() {
             }
             setIsLoading(false);
           })
-          .catch(() => {
-            if (isActive) setIsLoading(false);
+          .catch((error) => {
+            if (isActive) {
+              handleSearchError(`搜索失败: ${error.message}`);
+            }
           });
       }
       
@@ -912,12 +976,13 @@ function SearchPageClient() {
       setShowSuggestions(false);
       setHasSearched(false);
       setSearchResults([]);
+      setSearchError(null);
     }
 
     return () => {
       isActive = false;
     };
-  }, [searchParams, useFluidSearch, flushPendingResults, totalSources]);
+  }, [searchParams, useFluidSearch, flushPendingResults, totalSources, cleanupResources]);
 
   return (
     <PageLayout activePath='/search'>
@@ -956,7 +1021,7 @@ function SearchPageClient() {
 
               {/* 搜索建议 */}
               <SearchSuggestions
-                query={searchQuery}
+                query={debouncedSearchQuery}
                 isVisible={showSuggestions}
                 onSelect={handleSuggestionSelect}
                 onClose={() => setShowSuggestions(false)}
