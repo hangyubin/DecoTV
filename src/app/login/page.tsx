@@ -227,7 +227,7 @@ function LoginPageClient() {
             onClick={(e) => {
               // 确保表单能够提交
               if (!(!password || loading || (shouldAskUsername && !username))) {
-                const form = e.target.closest('form');
+                const form = (e.target as Element).closest('form');
                 if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
               }
             }}
