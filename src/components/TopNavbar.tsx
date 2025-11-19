@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Cat, Clover, Film, Home, Radio, Search, Tv } from 'lucide-react';
+import { Cat, Clover, Film, Home, Radio, Search, Tv, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import React from 'react';
@@ -15,6 +15,7 @@ export default function TopNavbar() {
   const { siteName } = useSite();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   const isActive = (href: string) => {
     return pathname === href;
@@ -26,99 +27,157 @@ export default function TopNavbar() {
   };
 
   return (
-    <header className='hidden md:block fixed top-0 left-0 right-0 z-[900]'>
-      <div className='mx-auto max-w-7xl px-4'>
-        <div className='mt-2 rounded-2xl border border-white/10 bg-white/30 dark:bg-gray-900/40 shadow-[0_0_1px_0_rgba(255,255,255,0.5),0_0_40px_-10px_rgba(99,102,241,0.5)] backdrop-blur-xl'>
-          <nav className='flex items-center justify-between h-14 px-3'>
+    <header className='fixed top-0 left-0 right-0 z-[900] m-0 p-0 overflow-hidden w-full'>
+        <nav className='flex items-center justify-between h-14 px-4 w-full m-0 p-0 border-b border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-gray-900/95 backdrop-blur-md shadow-sm shadow-black/5 dark:shadow-black/20'>
             {/* Left: Logo */}
             <div className='flex items-center gap-2 min-w-0'>
               <Link
                 href='/'
                 className='shrink-0 select-none hover:opacity-90 transition-opacity'
               >
-                <span className='text-lg font-extrabold tracking-tight neon-text'>
-                  {siteName || 'DecoTV'}
+                <span className='text-base sm:text-lg font-extrabold tracking-tight text-black dark:text-white drop-shadow-sm'>
+                  暴风影视
                 </span>
               </Link>
             </div>
 
-            {/* Center: Controls */}
-            <div className='flex items-center justify-center gap-2 flex-wrap'>
+            {/* Center: Controls (hidden on mobile, shown in mobile menu) */}
+            <div className='hidden md:flex items-center justify-center gap-1 sm:gap-1 md:gap-2 flex-wrap overflow-x-auto whitespace-nowrap max-w-[70%] flex-1'>
               <Link
-                href='/'
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm hover:opacity-90 transition-all glass-chip chip-glow chip-theme chip-home ${
-                  isActive('/') ? 'ring-2 ring-purple-400/60' : ''
-                }`}
-              >
-                <Home className='h-4 w-4' />
-                <span>首页</span>
-              </Link>
-              <Link
-                href='/search'
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm hover:opacity-90 transition-all glass-chip chip-glow chip-theme chip-search ${
-                  isActive('/search') ? 'ring-2 ring-purple-400/60' : ''
-                }`}
-              >
-                <Search className='h-4 w-4' />
-                <span>搜索</span>
-              </Link>
+                  href='/'
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 md:px-3 md:py-1.5 text-xs sm:text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isActive('/') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                >
+                  <Home className='h-4 w-4' />
+                  <span className='hidden md:inline'>首页</span>
+                </Link>
+                <Link
+                  href='/search'
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 md:px-3 md:py-1.5 text-xs sm:text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isActive('/search') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                >
+                  <Search className='h-4 w-4' />
+                  <span className='hidden md:inline'>搜索</span>
+                </Link>
 
-              {/* Categories */}
-              <Link
-                href='/douban?type=movie'
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm hover:opacity-90 transition-all glass-chip chip-glow chip-theme chip-movie ${
-                  isDoubanActive('movie') ? 'ring-2 ring-purple-400/60' : ''
-                }`}
-              >
-                <Film className='h-4 w-4' />
-                <span>电影</span>
-              </Link>
-              <Link
-                href='/douban?type=tv'
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm hover:opacity-90 transition-all glass-chip chip-glow chip-theme chip-tv ${
-                  isDoubanActive('tv') ? 'ring-2 ring-purple-400/60' : ''
-                }`}
-              >
-                <Tv className='h-4 w-4' />
-                <span>剧集</span>
-              </Link>
-              <Link
-                href='/douban?type=anime'
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm hover:opacity-90 transition-all glass-chip chip-glow chip-theme chip-anime ${
-                  isDoubanActive('anime') ? 'ring-2 ring-purple-400/60' : ''
-                }`}
-              >
-                <Cat className='h-4 w-4' />
-                <span>动漫</span>
-              </Link>
-              <Link
-                href='/douban?type=show'
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm hover:opacity-90 transition-all glass-chip chip-glow chip-theme chip-show ${
-                  isDoubanActive('show') ? 'ring-2 ring-purple-400/60' : ''
-                }`}
-              >
-                <Clover className='h-4 w-4' />
-                <span>综艺</span>
-              </Link>
-              <Link
-                href='/live'
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm hover:opacity-90 transition-all glass-chip chip-glow chip-theme chip-live ${
-                  isActive('/live') ? 'ring-2 ring-purple-400/60' : ''
-                }`}
-              >
-                <Radio className='h-4 w-4' />
-                <span>直播</span>
-              </Link>
+                {/* Categories */}
+                <Link
+                  href='/douban?type=movie'
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 md:px-3 md:py-1.5 text-xs sm:text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isDoubanActive('movie') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                >
+                  <Film className='h-4 w-4' />
+                  <span className='hidden lg:inline'>电影</span>
+                </Link>
+                <Link
+                  href='/douban?type=tv'
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 md:px-3 md:py-1.5 text-xs sm:text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isDoubanActive('tv') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                >
+                  <Tv className='h-4 w-4' />
+                  <span className='hidden lg:inline'>剧集</span>
+                </Link>
+                <Link
+                  href='/douban?type=anime'
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 md:px-3 md:py-1.5 text-xs sm:text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isDoubanActive('anime') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                >
+                  <Cat className='h-4 w-4' />
+                  <span className='hidden lg:inline'>动漫</span>
+                </Link>
+                <Link
+                  href='/douban?type=show'
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 md:px-3 md:py-1.5 text-xs sm:text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isDoubanActive('show') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                >
+                  <Clover className='h-4 w-4' />
+                  <span className='hidden lg:inline'>综艺</span>
+                </Link>
+                <Link
+                  href='/live'
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 md:px-3 md:py-1.5 text-xs sm:text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isActive('/live') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                >
+                  <Radio className='h-4 w-4' />
+                  <span className='hidden lg:inline'>直播</span>
+                </Link>
             </div>
 
-            {/* Right: Theme + User */}
-            <div className='flex items-center gap-2'>
+            {/* Mobile Menu */}
+            {mobileMenuOpen && (
+              <div className='md:hidden absolute top-full left-0 right-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm py-2 px-4 z-10'>
+                <div className='flex flex-col gap-1'>
+                  <Link
+                    href='/'
+                    className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isActive('/') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Home className='h-4 w-4' />
+                    <span>首页</span>
+                  </Link>
+                  <Link
+                    href='/search'
+                    className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isActive('/search') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Search className='h-4 w-4' />
+                    <span>搜索</span>
+                  </Link>
+                  <Link
+                    href='/douban?type=movie'
+                    className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isDoubanActive('movie') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Film className='h-4 w-4' />
+                    <span>电影</span>
+                  </Link>
+                  <Link
+                    href='/douban?type=tv'
+                    className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isDoubanActive('tv') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Tv className='h-4 w-4' />
+                    <span>剧集</span>
+                  </Link>
+                  <Link
+                    href='/douban?type=anime'
+                    className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isDoubanActive('anime') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Cat className='h-4 w-4' />
+                    <span>动漫</span>
+                  </Link>
+                  <Link
+                    href='/douban?type=show'
+                    className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isDoubanActive('show') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Clover className='h-4 w-4' />
+                    <span>综艺</span>
+                  </Link>
+                  <Link
+                    href='/live'
+                    className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-all ${isActive('/live') ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-700 dark:text-gray-200'}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Radio className='h-4 w-4' />
+                    <span>直播</span>
+                  </Link>
+                  <div className='flex items-center gap-2 py-2 mt-2 border-t border-gray-100 dark:border-gray-800'>
+                    <ThemeToggle />
+                    <UserMenu />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Menu Button (only on small screens) */}
+            <button 
+              className='md:hidden flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800' 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X className='h-5 w-5 text-gray-700 dark:text-gray-200' /> : <Menu className='h-5 w-5 text-gray-700 dark:text-gray-200' />}
+            </button>
+
+            {/* Right: Theme + User (hidden on mobile) */}
+            <div className='hidden md:flex items-center gap-2'>
               <ThemeToggle />
               <UserMenu />
             </div>
-          </nav>
-        </div>
-      </div>
+        </nav>
     </header>
   );
 }

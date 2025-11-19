@@ -29,7 +29,7 @@ import { useSite } from '@/components/SiteProvider';
 import VideoCard from '@/components/VideoCard';
 
 function HomeClient() {
-  const [activeTab, setActiveTab] = useState<'home' | 'favorites'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'continue' | 'favorites'>('home');
   const [hotMovies, setHotMovies] = useState<DoubanItem[]>([]);
   const [hotTvShows, setHotTvShows] = useState<DoubanItem[]>([]);
   const [hotVarietyShows, setHotVarietyShows] = useState<DoubanItem[]>([]);
@@ -170,38 +170,26 @@ function HomeClient() {
 
   return (
     <PageLayout>
-      {/* Hero Neon Logo */}
-      <div className='relative pt-16 sm:pt-20'>
-        <div className='flex items-center justify-center'>
-          <div className='text-center'>
-            <div className='mx-auto w-full px-4'>
-              <div className='inline-block rounded-3xl px-6 py-4 glass-card'>
-                <div className='text-4xl sm:text-6xl font-extrabold tracking-tight neon-text'>
-                  DecoTV
-                </div>
-                <div className='mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-300'>
-                  发现、收藏、继续观看
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+
       <div className='px-2 sm:px-10 py-4 sm:py-8 overflow-visible'>
         {/* 顶部 Tab 切换 */}
         <div className='mb-8 flex justify-center'>
           <CapsuleSwitch
             options={[
               { label: '首页', value: 'home' },
+              { label: '继续观看', value: 'continue' },
               { label: '收藏夹', value: 'favorites' },
             ]}
             active={activeTab}
-            onChange={(value) => setActiveTab(value as 'home' | 'favorites')}
+            onChange={(value) => setActiveTab(value as 'home' | 'continue' | 'favorites')}
           />
         </div>
 
         <div className='max-w-[95%] mx-auto'>
-          {activeTab === 'favorites' ? (
+          {activeTab === 'continue' ? (
+            // 继续观看视图
+            <ContinueWatching className="mt-4" />
+          ) : activeTab === 'favorites' ? (
             // 收藏夹视图
             <section className='mb-8'>
               <div className='mb-4 flex items-center justify-between'>
@@ -241,9 +229,6 @@ function HomeClient() {
           ) : (
             // 首页视图
             <>
-              {/* 继续观看 */}
-              <ContinueWatching />
-
               {/* 热门电影 */}
               <section className='mb-8'>
                 <div className='mb-4 flex items-center justify-between'>
@@ -469,8 +454,7 @@ function HomeClient() {
             </>
           )}
 
-          {/* DecoTV 底部炫酷卡片 */}
-          <DecoTVFooterCard />
+
         </div>
       </div>
       {announcement && showAnnouncement && (

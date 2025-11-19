@@ -86,6 +86,7 @@ function LoginPageClient() {
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // 初始设置为false，localStorage模式不需要用户名
   const [shouldAskUsername, setShouldAskUsername] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
 
@@ -98,13 +99,14 @@ function LoginPageClient() {
       .then((res) => res.json())
       .then((data) => {
         const storageType = data.StorageType;
+        // 明确检查storageType是否需要用户名
         setShouldAskUsername(!!storageType && storageType !== 'localstorage');
         setRegistrationEnabled(
           data.EnableRegistration && storageType !== 'localstorage'
         );
       })
       .catch(() => {
-        // 失败时使用默认值
+        // 失败时使用默认值，确保默认是localStorage模式
         setShouldAskUsername(false);
         setRegistrationEnabled(false);
       });
@@ -114,10 +116,17 @@ function LoginPageClient() {
     e.preventDefault();
     setError(null);
 
-    if (!password || (shouldAskUsername && !username)) return;
+    // 基本验证
+    if (!password || (shouldAskUsername && !username)) {
+      if (!password) setError('请输入密码');
+      else if (!username) setError('请输入用户名');
+      return;
+    }
 
     try {
       setLoading(true);
+      console.log('登录请求开始', { password: !!password, username: !!username });
+      
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,18 +134,31 @@ function LoginPageClient() {
           password,
           ...(shouldAskUsername ? { username } : {}),
         }),
+        // 添加跨域和凭证设置
+        credentials: 'include',
       });
 
+      console.log('登录请求响应', { status: res.status, ok: res.ok });
+      
       if (res.ok) {
         const redirect = searchParams.get('redirect') || '/';
+        console.log('登录成功，重定向到', redirect);
         router.replace(redirect);
       } else if (res.status === 401) {
         setError('密码错误');
+        console.log('密码验证失败');
       } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error ?? '服务器错误');
+        try {
+          const data = await res.json();
+          setError(data.error ?? '服务器错误');
+          console.log('服务器返回错误', data.error);
+        } catch (jsonError) {
+          setError('服务器返回格式错误');
+          console.log('JSON解析错误', jsonError);
+        }
       }
     } catch (error) {
+      console.error('登录异常', error);
       setError('网络错误，请稍后重试');
     } finally {
       setLoading(false);
@@ -202,6 +224,13 @@ function LoginPageClient() {
           <button
             type='submit'
             disabled={!password || loading || (shouldAskUsername && !username)}
+            onClick={(e) => {
+              // 确保表单能够提交
+              if (!(!password || loading || (shouldAskUsername && !username))) {
+                const form = e.target.closest('form');
+                if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
+              }
+            }}
             className='inline-flex w-full justify-center rounded-lg bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 py-3 text-base font-semibold text-white shadow-lg transition-all duration-300 hover:brightness-110 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 neon-pulse login-button'
           >
             {loading ? '登录中...' : '登录'}
