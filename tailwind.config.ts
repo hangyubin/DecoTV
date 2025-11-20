@@ -17,6 +17,7 @@ const config: Config = {
       },
       fontFamily: {
         primary: ['Inter', ...defaultTheme.fontFamily.sans],
+        cursive: ['"Ma Shan Zheng"', '"ZCOOL KuaiLe"', '"ZCOOL QingKe HuangYou"', 'cursive'],
       },
       colors: {
         primary: {

@@ -1,6 +1,17 @@
+/* 导入狂草字体 */
+@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+KuaiLe&family=ZCOOL+QingKe+HuangYou&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* 配置狂草字体类 */
+  .font-cursive-custom {
+    font-family: 'Ma Shan Zheng', 'ZCOOL KuaiLe', 'ZCOOL QingKe HuangYou', cursive !important;
+    font-weight: bold;
+  }
+}
 
 @layer utilities {
   .scrollbar-hide {

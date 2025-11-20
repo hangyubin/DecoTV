@@ -66,10 +66,10 @@ const CapsuleSwitch: React.FC<CapsuleSwitchProps> = ({
         className || ''
       }`}
     >
-      {/* 滑动的白色背景指示器 */}
+      {/* 滑动的深蓝色背景指示器 */}
       {indicatorStyle.width > 0 && (
         <div
-          className='absolute top-1 bottom-1 bg-white dark:bg-gray-500 rounded-full shadow-sm transition-all duration-300 ease-out'
+          className='absolute top-1 bottom-1 bg-[rgb(59,130,246)] dark:bg-[rgb(59,130,246)] rounded-full shadow-sm transition-all duration-300 ease-out'
           style={{
             left: `${indicatorStyle.left}px`,
             width: `${indicatorStyle.width}px`,
@@ -88,7 +88,7 @@ const CapsuleSwitch: React.FC<CapsuleSwitchProps> = ({
             onClick={() => onChange(opt.value)}
             className={`relative z-10 w-16 px-3 py-1 text-xs sm:w-20 sm:py-2 sm:text-sm rounded-full font-medium transition-all duration-200 cursor-pointer ${
               isActive
-                ? 'text-gray-900 dark:text-gray-100'
+                ? 'text-white dark:text-white'
                 : 'text-gray-700 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
             }`}
           >
