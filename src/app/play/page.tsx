@@ -7,7 +7,6 @@ import Hls from 'hls.js';
 import { Heart } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { resourceTracker } from '@/shared/resourceTracker';
 
 import {
   deleteFavorite,
@@ -29,6 +28,8 @@ import EpisodeSelector from '@/components/EpisodeSelector';
 import PageLayout from '@/components/PageLayout';
 import SkipConfigPanel from '@/components/SkipConfigPanel';
 import Toast from '@/components/Toast';
+
+import { resourceTracker } from '@/shared/resourceTracker';
 
 // 扩展 HTMLVideoElement 类型以支持 hls 属性
 declare global {
@@ -1578,7 +1579,7 @@ function PlayPageClient() {
         // 追踪视频元素和播放器实例
         if (artPlayerRef.current && artPlayerRef.current.video) {
           // 追踪视频元素
-          const videoResourceId = resourceTracker.track(
+          const _videoResourceId = resourceTracker.track(
             artPlayerRef.current.video, 
             'HTMLVideoElement', 
             `video_${currentIdRef.current || 'unknown'}`

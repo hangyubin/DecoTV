@@ -125,7 +125,6 @@ function LoginPageClient() {
 
     try {
       setLoading(true);
-      console.log('登录请求开始', { password: !!password, username: !!username });
       
       const res = await fetch('/api/login', {
         method: 'POST',
@@ -138,27 +137,21 @@ function LoginPageClient() {
         credentials: 'include',
       });
 
-      console.log('登录请求响应', { status: res.status, ok: res.ok });
       
       if (res.ok) {
         const redirect = searchParams.get('redirect') || '/';
-        console.log('登录成功，重定向到', redirect);
         router.replace(redirect);
       } else if (res.status === 401) {
         setError('密码错误');
-        console.log('密码验证失败');
       } else {
         try {
           const data = await res.json();
           setError(data.error ?? '服务器错误');
-          console.log('服务器返回错误', data.error);
         } catch (jsonError) {
           setError('服务器返回格式错误');
-          console.log('JSON解析错误', jsonError);
         }
       }
     } catch (error) {
-      console.error('登录异常', error);
       setError('网络错误，请稍后重试');
     } finally {
       setLoading(false);

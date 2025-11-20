@@ -10,12 +10,46 @@ export interface VideoItem {
   metadata?: VideoMetadata;
 }
 
+export interface VideoMetadata {
+  width?: number;
+  height?: number;
+  bitrate?: number;
+  codec?: string;
+}
+
 export interface PlaylistConfig {
   loop: boolean;
   shuffle: boolean;
   crossfade: boolean;
   crossfadeDuration: number;
   transitionEffect: TransitionType;
+}
+
+export interface VideoConfig {
+  crossfade: boolean;
+  crossfadeDuration: number;
+  loop: boolean;
+  shuffle: boolean;
+  transitionEffect: TransitionType;
+}
+
+export interface DisplayConfig {
+  fullscreen: boolean;
+  alwaysOnTop: boolean;
+  resolution: string;
+}
+
+export interface PerformanceConfig {
+  cacheSize: number;
+  maxFPS: number;
+  hardwareAcceleration: boolean;
+  enablePreloading: boolean;
+}
+
+export interface AudioConfig {
+  volume: number;
+  mute: boolean;
+  visualization: boolean;
 }
 
 export interface AppConfig {
@@ -47,60 +81,20 @@ export interface VideoEvent {
   type: string;
   videoId: string;
   timestamp: number;
-  data?: any;
+  data?: unknown;
 }
 
-// 补充缺失的类型定义
-export interface VideoMetadata {
-  // 可以根据实际需求添加视频元数据字段
-  resolution?: string;
-  codec?: string;
-  bitrate?: number;
-  creationDate?: string;
-  [key: string]: any;
+// 性能监控类型
+export interface PerformanceMetric {
+  name: string;
+  value: number;
+  timestamp: number;
+  tags: Record<string, string>;
 }
 
-export interface VideoConfig {
-  // 视频配置相关字段
-  crossfade: boolean;
-  crossfadeDuration: number;
-  loop: boolean;
-  shuffle: boolean;
-  transitionEffect: TransitionType;
-  defaultVolume?: number;
-  autoplay?: boolean;
-  playNextAutomatically?: boolean;
-  [key: string]: any;
-}
-
-export interface DisplayConfig {
-  // 显示配置相关字段
-  fullscreen: boolean;
-  alwaysOnTop: boolean;
-  resolution: string;
-  theme?: string;
-  subtitlesEnabled?: boolean;
-  interfaceScale?: number;
-  [key: string]: any;
-}
-
-export interface PerformanceConfig {
-  // 性能配置相关字段
-  cacheSize: number;
-  maxFPS: number;
-  hardwareAcceleration: boolean;
-  enablePreloading: boolean;
-  maxResolution?: string;
-  [key: string]: any;
-}
-
-export interface AudioConfig {
-  // 音频配置相关字段
-  volume: number;
-  mute: boolean;
-  visualization: boolean;
-  outputDevice?: string;
-  audioBalance?: number;
-  equalizerSettings?: Record<string, number>;
-  [key: string]: any;
+export interface PerformanceReport {
+  averageFPS: number;
+  frameTimeVariance: number;
+  memoryUsage?: NodeJS.MemoryUsage;
+  metrics: PerformanceMetric[];
 }

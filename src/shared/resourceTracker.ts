@@ -1,5 +1,5 @@
 interface TrackedResource {
-  resource: any;
+  resource: unknown;
   type: string;
   id: string;
   createdAt: number;
@@ -16,7 +16,7 @@ export class ResourceTracker {
     this.startCleanupInterval();
   }
 
-  track(resource: any, type: string, id?: string): string {
+  track(resource: unknown, type: string, id?: string): string {
     const resourceId = id || this.generateId();
     
     this.resources.set(resourceId, {
@@ -35,7 +35,7 @@ export class ResourceTracker {
     return this.resources.delete(id);
   }
 
-  access(id: string): any {
+  access(id: string): unknown {
     const resource = this.resources.get(id);
     if (resource) {
       resource.lastAccessed = Date.now();
@@ -52,23 +52,35 @@ export class ResourceTracker {
   private cleanup(): void {
     const now = Date.now();
     let leakedCount = 0;
+    const idsToRemove: string[] = [];
 
     this.resources.forEach((tracked, id) => {
       if (now - tracked.lastAccessed > this.maxResourceAge) {
-        console.warn(`Potential memory leak detected:`, {
-          type: tracked.type,
-          age: now - tracked.createdAt,
-          stack: tracked.stackTrace
-        });
+        this.logPotentialLeak(tracked);
         
         this.forceCleanup(tracked);
-        this.resources.delete(id);
+        idsToRemove.push(id);
         leakedCount++;
       }
     });
 
-    if (leakedCount > 0) {
+    // 在forEach外部删除，避免迭代过程中修改集合
+    idsToRemove.forEach(id => this.resources.delete(id));
+
+    if (leakedCount > 0 && process.env.NODE_ENV === 'development') {
+      // eslint-disable-next-line no-console
       console.log(`Cleaned up ${leakedCount} potentially leaked resources`);
+    }
+  }
+
+  private logPotentialLeak(tracked: TrackedResource): void {
+    if (process.env.NODE_ENV === 'development') {
+      // eslint-disable-next-line no-console
+      console.warn('Potential memory leak detected:', {
+        type: tracked.type,
+        age: Date.now() - tracked.createdAt,
+        stack: tracked.stackTrace
+      });
     }
   }
 
@@ -76,17 +88,26 @@ export class ResourceTracker {
     const { resource } = tracked;
     
     // 根据资源类型进行清理
-    if (resource instanceof HTMLVideoElement) {
-      resource.pause();
-      resource.src = '';
-      resource.load();
-    } else if (resource.dispose && typeof resource.dispose === 'function') {
-      resource.dispose();
-    } else if (resource.destroy && typeof resource.destroy === 'function') {
-      resource.destroy();
+    if (resource && typeof resource === 'object') {
+      const videoElement = resource as Partial<HTMLVideoElement>;
+      if (videoElement.pause && typeof videoElement.pause === 'function') {
+        videoElement.pause();
+        videoElement.src = '';
+        if (videoElement.load) {
+          videoElement.load();
+        }
+      } else {
+        const disposable = resource as { dispose?: () => void };
+        if (disposable.dispose && typeof disposable.dispose === 'function') {
+          disposable.dispose();
+        } else {
+          const destroyable = resource as { destroy?: () => void };
+          if (destroyable.destroy && typeof destroyable.destroy === 'function') {
+            destroyable.destroy();
+          }
+        }
+      }
     }
-    
-    tracked.resource = null;
   }
 
   private generateId(): string {

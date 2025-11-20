@@ -1,5 +1,15 @@
 import type { AppConfig } from './types';
 
+// 移除 require 语句，使用动态导入
+const loadNodeModules = async () => {
+  if (typeof window === 'undefined') {
+    const fs = await import('fs');
+    const path = await import('path');
+    return { fs, path };
+  }
+  return null;
+};
+
 const defaultConfig: AppConfig = {
   video: {
     crossfade: true,
@@ -40,17 +50,20 @@ export class ConfigManager {
         }
       } else {
         // 主进程中的配置加载
-        const fs = require('fs');
-        const path = require('path');
-        const configPath = path.join(process.cwd(), 'config.json');
-        
-        if (fs.existsSync(configPath)) {
-          const saved = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-          this.config = this.mergeConfigs(defaultConfig, saved);
+        const nodeModules = await loadNodeModules();
+        if (nodeModules) {
+          const { fs, path } = nodeModules;
+          const configPath = path.join(process.cwd(), 'config.json');
+          
+          if (fs.existsSync(configPath)) {
+            const saved = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            this.config = this.mergeConfigs(defaultConfig, saved);
+          }
         }
       }
     } catch (error) {
-      console.error('Failed to load config:', error);
+      // 使用更具体的错误处理
+      this.handleError('Failed to load config', error);
     }
     
     return this.config;
@@ -63,16 +76,18 @@ export class ConfigManager {
       if (typeof window !== 'undefined' && window.localStorage) {
         localStorage.setItem('decoTV-config', JSON.stringify(this.config));
       } else {
-        const fs = require('fs');
-        const path = require('path');
-        const configPath = path.join(process.cwd(), 'config.json');
-        fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2));
+        const nodeModules = await loadNodeModules();
+        if (nodeModules) {
+          const { fs, path } = nodeModules;
+          const configPath = path.join(process.cwd(), 'config.json');
+          fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2));
+        }
       }
       
       // 通知监听器
       this.listeners.forEach(listener => listener(this.config));
     } catch (error) {
-      console.error('Failed to save config:', error);
+      this.handleError('Failed to save config', error);
     }
   }
 
@@ -90,21 +105,31 @@ export class ConfigManager {
     };
   }
 
-  private mergeConfigs(target: AppConfig, source: any): AppConfig {
+  private mergeConfigs(target: AppConfig, source: unknown): AppConfig {
     const result = { ...target };
     
-    for (const key in source) {
-      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-        result[key as keyof AppConfig] = this.mergeConfigs(
-          result[key as keyof AppConfig] as any,
-          source[key]
-        ) as any;
-      } else if (source[key] !== undefined) {
-        result[key as keyof AppConfig] = source[key];
+    if (source && typeof source === 'object') {
+      for (const [key, value] of Object.entries(source)) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          (result as Record<string, unknown>)[key] = this.mergeConfigs(
+            (result as Record<string, unknown>)[key] as AppConfig,
+            value
+          );
+        } else if (value !== undefined) {
+          (result as Record<string, unknown>)[key] = value;
+        }
       }
     }
     
     return result;
+  }
+
+  private handleError(message: string, error: unknown): void {
+    // 在生产环境中可以发送到错误监控服务
+    if (process.env.NODE_ENV === 'development') {
+      // eslint-disable-next-line no-console
+      console.error(message, error);
+    }
   }
 }
 
