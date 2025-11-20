@@ -7,6 +7,7 @@ import Hls from 'hls.js';
 import { Heart } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { resourceTracker } from '@/shared/resourceTracker';
 
 import {
   deleteFavorite,
@@ -498,6 +499,9 @@ function PlayPageClient() {
     }
   };
 
+  // 资源追踪引用
+  const resourceIdRef = useRef<string | null>(null);
+
   // 清理播放器资源的统一函数
   const cleanupPlayer = () => {
     if (artPlayerRef.current) {
@@ -511,10 +515,22 @@ function PlayPageClient() {
         artPlayerRef.current.destroy();
         artPlayerRef.current = null;
 
+        // 从资源追踪器中移除
+        if (resourceIdRef.current) {
+          resourceTracker.untrack(resourceIdRef.current);
+          resourceIdRef.current = null;
+          console.log('播放器资源已从追踪系统中移除');
+        }
+
         console.log('播放器资源已清理');
       } catch (err) {
         console.warn('清理播放器资源时出错:', err);
         artPlayerRef.current = null;
+        // 确保即使出错也从追踪器中移除
+        if (resourceIdRef.current) {
+          resourceTracker.untrack(resourceIdRef.current);
+          resourceIdRef.current = null;
+        }
       }
     }
   };
@@ -1350,6 +1366,9 @@ function PlayPageClient() {
       Artplayer.PLAYBACK_RATE = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
       Artplayer.USE_RAF = true;
 
+      // 先清理之前的资源
+      cleanupPlayer();
+
       artPlayerRef.current = new Artplayer({
         container: artRef.current,
         url: videoUrl,
@@ -1556,6 +1575,25 @@ function PlayPageClient() {
       artPlayerRef.current.on('ready', () => {
         setError(null);
 
+        // 追踪视频元素和播放器实例
+        if (artPlayerRef.current && artPlayerRef.current.video) {
+          // 追踪视频元素
+          const videoResourceId = resourceTracker.track(
+            artPlayerRef.current.video, 
+            'HTMLVideoElement', 
+            `video_${currentIdRef.current || 'unknown'}`
+          );
+          
+          // 追踪整个播放器实例
+          resourceIdRef.current = resourceTracker.track(
+            artPlayerRef.current, 
+            'ArtPlayer', 
+            `artplayer_${currentIdRef.current || 'unknown'}`
+          );
+          
+          console.log('视频资源已加入追踪系统');
+        }
+
         // 播放器就绪后，如果正在播放则请求 Wake Lock
         if (artPlayerRef.current && !artPlayerRef.current.paused) {
           requestWakeLock();
@@ -1629,6 +1667,11 @@ function PlayPageClient() {
 
       // 监听视频时间更新事件，实现跳过片头片尾
       artPlayerRef.current.on('video:timeupdate', () => {
+        // 更新资源访问时间
+        if (resourceIdRef.current) {
+          resourceTracker.access(resourceIdRef.current);
+        }
+        
         if (!skipConfigRef.current.enable) return;
 
         const currentTime = artPlayerRef.current.currentTime || 0;
