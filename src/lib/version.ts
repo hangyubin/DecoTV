@@ -4,8 +4,12 @@
  */
 
 // 版本常量
-const CURRENT_SEMANTIC_VERSION = '0.7.0';
+const CURRENT_SEMANTIC_VERSION = '0.9.0';
 export const CURRENT_VERSION = CURRENT_SEMANTIC_VERSION;
+
+// 硬编码的构建时间戳（每次发布时更新）
+// 这是最后的回退值，确保即使所有文件读取都失败也能有一个基准
+export const BUILD_TIMESTAMP = '20251215235531';
 
 const DEFAULT_UPDATE_REPO = 'Decohererk/DecoTV';
 const UPDATE_REPO = process.env.NEXT_PUBLIC_UPDATE_REPO || DEFAULT_UPDATE_REPO;
@@ -13,16 +17,18 @@ const UPDATE_REF = process.env.NEXT_PUBLIC_UPDATE_REF || 'main';
 const VERSION_TIMESTAMP_REGEX = /^\d{14}$/;
 const REMOTE_FETCH_TIMEOUT = 5000;
 
-const VERSION_SOURCE_URLS = [
+export const VERSION_SOURCE_URLS = [
   `https://raw.githubusercontent.com/${UPDATE_REPO}/${UPDATE_REF}/VERSION.txt`,
   `https://cdn.jsdelivr.net/gh/${UPDATE_REPO}@${UPDATE_REF}/VERSION.txt`,
-  `https://raw.fastgit.org/${UPDATE_REPO}/${UPDATE_REF}/VERSION.txt`,
+  `https://fastly.jsdelivr.net/gh/${UPDATE_REPO}@${UPDATE_REF}/VERSION.txt`,
+  `https://ghproxy.net/https://raw.githubusercontent.com/${UPDATE_REPO}/${UPDATE_REF}/VERSION.txt`,
 ];
 
 const PACKAGE_SOURCE_URLS = [
   `https://raw.githubusercontent.com/${UPDATE_REPO}/${UPDATE_REF}/package.json`,
   `https://cdn.jsdelivr.net/gh/${UPDATE_REPO}@${UPDATE_REF}/package.json`,
-  `https://raw.fastgit.org/${UPDATE_REPO}/${UPDATE_REF}/package.json`,
+  `https://fastly.jsdelivr.net/gh/${UPDATE_REPO}@${UPDATE_REF}/package.json`,
+  `https://ghproxy.net/https://raw.githubusercontent.com/${UPDATE_REPO}/${UPDATE_REF}/package.json`,
 ];
 
 export interface VersionInfo {
@@ -46,9 +52,9 @@ function appendCacheBuster(url: string): string {
   return url.includes('?') ? `${url}&${cacheBuster}` : `${url}?${cacheBuster}`;
 }
 
-async function fetchPlainTextWithTimeout(
+export async function fetchPlainTextWithTimeout(
   url: string,
-  accept = 'text/plain'
+  accept = 'text/plain',
 ): Promise<string | null> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REMOTE_FETCH_TIMEOUT);
@@ -69,7 +75,7 @@ async function fetchPlainTextWithTimeout(
     }
 
     return (await response.text()).trim();
-  } catch (error) {
+  } catch {
     return null;
   } finally {
     clearTimeout(timeoutId);
@@ -170,9 +176,9 @@ export async function getCurrentVersionInfo(): Promise<VersionInfo> {
       updateAvailable: false, // 将在 checkForUpdates 中更新
       displayVersion: `v${CURRENT_VERSION}`,
     };
-  } catch (error) {
+  } catch {
     // 降级处理：使用 VERSION.txt 的默认值
-    const timestamp = '20251006163200';
+    const timestamp = '20251212140536';
     return {
       version: CURRENT_VERSION,
       timestamp,
@@ -228,6 +234,7 @@ async function fetchRemoteSemanticVersion(): Promise<string | null> {
 export async function checkForUpdates(currentTimestamp: string): Promise<{
   hasUpdate: boolean;
   remoteVersion?: RemoteVersionInfo;
+  checkFailed?: boolean;
 }> {
   try {
     // 同时获取远程时间戳和语义版本号
@@ -274,10 +281,11 @@ export async function checkForUpdates(currentTimestamp: string): Promise<{
     return {
       hasUpdate: false,
     };
-  } catch (error) {
-    // 静默处理错误
+  } catch {
+    // 标记检查失败
     return {
       hasUpdate: false,
+      checkFailed: true,
     };
   }
 }
